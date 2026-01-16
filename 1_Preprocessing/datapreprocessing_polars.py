@@ -42,7 +42,9 @@ class DataPreprocessingPolars:
         
         # Filter by Date: [start_date:end_date]
         original_rows = df.height #df.shape[0] == vertical length
+        #Original_rows == How many rows we have at the beginning
         
+        #Condition if we did not specify any start and end_date : takes first of the column and add 3 months ~ 90 days
         if self.start_date and self.end_date:
             # Convert date strings to datetime
             start = pl.lit(self.start_date).str.to_datetime(format='%Y-%m-%d')
@@ -52,14 +54,14 @@ class DataPreprocessingPolars:
             first_date = df.select(pl.col('timestamp').min()).item()
             end_date_auto = first_date + pl.duration(days=90)  # ~3 months
             df = df.filter((pl.col('timestamp') >= first_date) & (pl.col('timestamp') <= end_date_auto))
-        
+        #Filtered_rows == How many rows we have after selecting 3 months only 
         filtered_rows = df.height
         
         # Keep only relevant columns
         columns_to_keep = ['timestamp', 'bid-price', 'bid-volume', 'ask-price', 'ask-volume']
         df = df.select(columns_to_keep)
         
-        # Drop zero volume rows: avoids division by zero
+        # Drop zero volume rows: avoids division by zero when averaging by volume
         rows_before_zero = df.height
         df = df.filter(
             (pl.col('bid-volume') != 0) & 
