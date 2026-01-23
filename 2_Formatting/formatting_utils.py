@@ -1,6 +1,3 @@
-"""
-Defining functions for Step 2: Formatting
-"""
 import pandas as pd
 import numpy as np
 import seaborn as sns
