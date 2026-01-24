@@ -12,17 +12,25 @@ def generate_random_clusters(TICKERS, n_clusters=3, seed=42):
 
 
 class Pair:
-    def __init__(self, stock_A, stock_B, index_A, index_B, df_returns):
+    # CHANGE REQUEST 2: Added prices and spreads parameters
+    # OPTIMIZATION: Accept Series directly instead of DataFrames with column names
+    def __init__(self, stock_A, stock_B, index_A, index_B, returns_A, returns_B, 
+                 prices_A, prices_B, spreads_A, spreads_B):
         self.stock_A = stock_A 
         self.index_A = index_A
-        self.returns_A = df_returns[stock_A]
+        self.returns_A = returns_A
         self.stock_B = stock_B
         self.index_B = index_B
-        self.returns_B = df_returns[stock_B]
+        self.returns_B = returns_B
+        # CHANGE REQUEST 2: Store prices and spreads for spread-aware evaluation
+        self.prices_A = prices_A
+        self.prices_B = prices_B
+        self.spreads_A = spreads_A
+        self.spreads_B = spreads_B
         self.entered = False # True only when pair is entered
         self.invert = None # baseline: longA shortB, invert: shortA longB
         self.current_t_in = None
-        self.windows = []
+        self.plot_windows = []
         self.R_in = None
         self.cumulR_in = None
         self.patience = 0
@@ -36,17 +44,17 @@ class Pair:
 
     def exit(self, t_out, emergency):
         self.entered = False
-        self.windows.append([self.current_t_in, t_out, self.invert, emergency])
+        self.plot_windows.append([self.current_t_in, t_out, self.invert, emergency])
         self.invert = None
         self.current_t_in = None
         self.R_in = None
         self.patience = 0
 
     def evaluate(self, t,
-                 window, lambda_in, lambda_out, lambda_emergency, patience_max,
+                 window_lookback, lambda_in, lambda_out, lambda_emergency, patience_max,
                  np_positions):
         
-        returns_diff_window = self.returns_A.iloc[t - window: t+1] - self.returns_B.iloc[t - window: t+1]
+        returns_diff_window = self.returns_A.iloc[t - window_lookback: t+1] - self.returns_B.iloc[t - window_lookback: t+1]
         rolling_sigma = returns_diff_window.std()
         latest_return_diff = self.returns_A.iloc[t] - self.returns_B.iloc[t]
 
@@ -54,15 +62,22 @@ class Pair:
 
         if(not self.entered):
             
-            # Check for SIGNAL D'ENTREE
-
-            if latest_return_diff > lambda_in * rolling_sigma:  # Enter pair, short A long B
+            # Calculate total spread cost for entering the pair (one-way cost)
+            spread_cost_A = (self.spreads_A.iloc[t] / (2 * self.prices_A.iloc[t]))
+            spread_cost_B = (self.spreads_B.iloc[t] / (2 * self.prices_B.iloc[t]))
+            total_spread_cost = spread_cost_A + spread_cost_B
+            
+            # Adjust entry threshold to account for spread
+            effective_lambda_in = lambda_in * rolling_sigma + total_spread_cost
+            
+            # Check for SIGNAL D'ENTREE (with spread adjustment)
+            if latest_return_diff > effective_lambda_in:  # Enter pair, short A long B
                 self.enter(invert = True,
                            t_in = t,
                            R_in = latest_return_diff,
                            cumulR_in = cumul_returns_diff.iloc[-1])
 
-            elif latest_return_diff < - lambda_in * rolling_sigma:  # Enter pair, long A short B
+            elif latest_return_diff < -effective_lambda_in:  # Enter pair, long A short B
                 self.enter(invert = False,
                            t_in = t,
                            R_in = latest_return_diff, 
@@ -93,9 +108,23 @@ class Pair:
                     return
             
             # Sortie sur patience
-            if self.patience < patience_max:
-                self.patience += 1
+            if self.invert == True:
+                # If divergence is getting worse or staying flat, increment patience
+                if cumul_returns_diff.iloc[-1] >= self.cumulR_in:
+                    self.patience += 1
+                else:
+                    # If improving (converging), reset patience
+                    self.patience = 0
             else:
+                # If divergence is getting worse or staying flat, increment patience
+                if cumul_returns_diff.iloc[-1] <= self.cumulR_in:
+                    self.patience += 1
+                else:
+                    # If improving (converging), reset patience
+                    self.patience = 0
+            
+            # Exit if patience exceeded
+            if self.patience >= patience_max:
                 self.exit(t_out = t, emergency = 'onPatience')
 
         # update positions dataframe
@@ -119,10 +148,10 @@ class Pair:
         ax.grid(alpha = 0.5)
         
         
-        if len(self.windows) > 0:
-            for i in range(len(self.windows)):
+        if len(self.plot_windows) > 0:
+            for i in range(len(self.plot_windows)):
         
-                t_in, t_out, invert, emergency = self.windows[i]
+                t_in, t_out, invert, emergency = self.plot_windows[i]
         
                 date_in = df_returns.iloc[t_in].name
                 date_out = df_returns.iloc[t_out].name
@@ -135,32 +164,7 @@ class Pair:
         plt.show()
 
 
-def construct_positions(pairs, nb_eval, nb_pairs, TICKERS,
-                        window, lambda_in, lambda_out, lambda_emergency, patience_max,
-                        df_returns, df_cum_returns,
-                        display_figures):
-    
-    np_positions = np.zeros((len(df_returns.index), len(TICKERS)+1))
-    print(f"  Succesfully initialized empty positions table, shape:{np_positions.shape}")
-
-    count = 0
-    for pair in pairs[:nb_eval]:
-        count += 1
-        print(f"  Evaluating pair {count}/{nb_pairs}: {pair.stock_A}-{pair.stock_B}")
-        for t in range(window, len(df_returns)):
-            pair.evaluate(t,
-                          window, lambda_in, lambda_out, lambda_emergency, patience_max,
-                          np_positions)
-        if(count <= 5 and display_figures):
-            pair.plot_lifetime_last(df_returns = df_returns,
-                                    df_cum_returns = df_cum_returns)
-            
-    np_positions[:, -1] = np_positions.sum(axis=1)
-
-    return np_positions
-
-
-def compute_strategy_pnl(returns_df, positions_df, transaction_cost=0.00001):
+def compute_strategy_pnl(returns_df, positions_df, prices_df, spreads_df):
     
 	# Position at previous tick (shift forward by 1)
 	# We hold the position from t-1 during period t, earning returns[t]
@@ -174,9 +178,12 @@ def compute_strategy_pnl(returns_df, positions_df, transaction_cost=0.00001):
 	# Calculate position changes (where transactions occur)
 	position_changes = positions_df.diff().fillna(positions_df.iloc[0])
 	
-	# Transaction costs: cost * |position_change| for each asset
-	# Sum across all assets to get total cost per tick
-	transaction_costs_per_tick = (position_changes.abs() * transaction_cost).sum(axis=1)
+	# Transaction cost per trade = (spread / 2) / price
+	# This represents the cost of crossing the spread once (one-way)
+	transaction_cost_pct = (spreads_df / (2 * prices_df))
+	
+	# Total transaction costs: sum across all assets of |position_change| * spread_cost
+	transaction_costs_per_tick = (position_changes.abs() * transaction_cost_pct).sum(axis=1)
 	
 	# Net PnL per tick
 	net_pnl_per_tick = trading_pnl - transaction_costs_per_tick
