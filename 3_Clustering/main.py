@@ -280,3 +280,41 @@ def run_marsili(returns_df):
     return results
 
 
+def run_louvain(returns_df):
+    """
+    Run Louvain clustering with minimal console output.
+    
+    This function runs Louvain clustering and returns results with only
+    a message at the beginning and end.
+    
+    Parameters:
+    -----------
+    returns_df : pd.DataFrame
+        DataFrame containing stock returns with dates as index and ticker symbols as columns
+    
+    Returns:
+    --------
+    pd.DataFrame : DataFrame with columns:
+        - Index: Asset ticker symbols
+        - 'Louvain_Cluster': Cluster assignments from Louvain method
+    
+    """
+    print('Starting Louvain clustering...')
+    
+    # Get tickers
+    tickers = returns_df.columns
+    
+    # Run Louvain Clustering
+    louvain_df = LouvainCorrelationClustering(returns_df)
+    louvain_clusters = louvain_df['cluster'].values
+    
+    # Create Output DataFrame
+    results = pd.DataFrame({
+        'Louvain_Cluster': louvain_clusters
+    }, index=tickers)
+    
+    print('Louvain clustering completed.')
+    
+    return results
+
+
