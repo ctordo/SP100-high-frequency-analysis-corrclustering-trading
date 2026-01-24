@@ -2,14 +2,17 @@ import polars as pl
 import numpy as np
 from pathlib import Path
 from collections import defaultdict
+from datetime import date
 
 
 class DataPreprocessingPolars:
-    def __init__(self, folder_path, output_path, start_date=None, end_date=None):
-        self.folder_path = folder_path  # Raw parquet data location
-        self.output_path = output_path  # Clean output data location
+    def __init__(self, folder_path, output_path, timestamp_path,  start_date=None, end_date=None):
+        self.folder_path = Path(folder_path)  # Raw parquet data location
+        self.output_path = Path(output_path)  # Clean output data location
+        self.timestamp_path = Path(timestamp_path)
         self.start_date = start_date  # Optional: filter start date
         self.end_date = end_date  # Optional: filter end date
+        self.assets_to_skip = None
     
     def process_single_asset(self, file_path):
         """
@@ -18,7 +21,7 @@ class DataPreprocessingPolars:
         Steps:
         1. Load raw data
         2. Convert datetime and set as index
-        3. Filter by date (first 3 months if no dates provided)
+        3. Filter by date
         4. Keep only relevant columns
         5. Create mid-price (volume-weighted)
         6. VWAP aggregation for duplicate timestamps
@@ -43,7 +46,8 @@ class DataPreprocessingPolars:
         # Filter by Date: [start_date:end_date]
         original_rows = df.height #df.shape[0] == vertical length
         #Original_rows == How many rows we have at the beginning
-        
+
+                    
         #Condition if we did not specify any start and end_date : takes first of the column and add 3 months ~ 90 days
         if self.start_date and self.end_date:
             # Convert date strings to datetime
@@ -141,50 +145,120 @@ class DataPreprocessingPolars:
             'zero_volume_removed': zero_volume_removed,
             'final_rows': df.height
         }
-    
-    def _process_or_load_asset(self, file, output_path):
+    #===================================================================
+    def check_timestamps(self, raw_data_path):
         """
-        Helper function: Check if cleaned file exists, load it if yes, process if no
+        Check first and last timestamps for all parquet files in the raw data folder.
         
         Args:
-            file: Path to raw parquet file
-            output_path: Path object to output directory
+            raw_data_path: Path to folder containing raw parquet files
             
         Returns:
-            Tuple of (df_clean, stats, was_loaded)
+            DataFrame with columns: asset, first_timestamp, last_timestamp
         """
-        output_file = output_path / f"{file.stem}_clean.parquet"
+        folder = Path(raw_data_path)
+        parquet_files = list(folder.glob('*.parquet'))
         
-        # Check if cleaned file already exists
-        if output_file.exists():
+        timestamp_data = []
+        
+        for file in parquet_files:
             try:
-                # Load existing cleaned file
-                df_clean = pl.read_parquet(output_file)
+                df = pl.read_parquet(file)
+                # Convert timestamp to datetime if it's a string
+                if df.schema['timestamp'] == pl.Utf8:
+                    df = df.with_columns(pl.col('timestamp').str.to_datetime(format='%Y-%m-%d %H:%M:%S%.f'))
                 
-                # Create stats from loaded file
-                stats = {
-                    'ticker': file.stem,
-                    'original_rows': None,  # Not available for loaded files
-                    'filtered_rows': None,
-                    'duplicates_removed': None,
-                    'nan_removed': None,
-                    'zero_volume_removed': None,
-                    'final_rows': df_clean.height
-                }
+                first_ts = df.select(pl.col('timestamp').min()).item()
+                last_ts = df.select(pl.col('timestamp').max()).item()
                 
-                return df_clean, stats, True  # True = was loaded
-                
+                timestamp_data.append({
+                    'asset': file.stem,
+                    'first_timestamp': first_ts,
+                    'last_timestamp': last_ts
+                })
             except Exception as e:
-                print(f"  Warning: Could not load existing file, will reprocess. Error: {e}")
-                # Fall through to processing
+                print(f"Error reading {file.stem}: {e}")
+                timestamp_data.append({
+                    'asset': file.stem,
+                    'first_timestamp': None,
+                    'last_timestamp': None
+                })
         
-        # Process the asset (file doesn't exist or loading failed)
-        df_clean, stats = self.process_single_asset(file)
+        # Create DataFrame from collected data
+        df_timestamps = pl.DataFrame(timestamp_data)
+        return df_timestamps.sort('asset')
+    #===========================================================
+    
+    def check_missing_data_per_asset(self, raw_data_path, assets_to_skip):
+        """
+        Check for missing dates in each asset per year (2004-2008).
         
-        # Save cleaned data
-        df_clean.write_parquet(output_file)
+        For each asset, we identify the expected trading dates based on the union
+        of all dates present across all assets, then count how many dates are missing.
         
-        return df_clean, stats, False  # False = was processed
+        Args:
+            raw_data_path: Path to folder containing raw parquet files
+            assets_to_skip: List of asset names to exclude from the check
+            
+        Returns:
+            DataFrame with columns: asset_name, 2004, 2005, 2006, 2007, 2008
+        """
+        folder = Path(raw_data_path)
+        parquet_files = [f for f in folder.glob('*.parquet') if f.stem not in assets_to_skip]
+        
+        if not parquet_files:
+            print("No valid parquet files found for missing data check")
+            return None
+        
+        print(f"Analyzing missing data across {len(parquet_files)} assets...")
+        
+        #First we collect all dates from all assets to determine "expected" trading dates
+        # By that we mean : If Asset A has January 2,3,5 and Asset B has January 1,2,3,4,5,6 
+        # then expected trading dates are 1,2,3,4,5,6 and we can determine that A has some missing values
+
+        all_dates_union = set()
+        asset_dates = {}
+        
+        for file in parquet_files:
+            try:
+                df = pl.read_parquet(file)
+                # Convert timestamp to datetime if needed
+                if df.schema['timestamp'] == pl.Utf8:
+                    df = df.with_columns(pl.col('timestamp').str.to_datetime(format='%Y-%m-%d %H:%M:%S%.f'))
+                
+                # Extract unique dates (date only, without time)
+                unique_dates = set(df.select(pl.col('timestamp').dt.date()).unique().to_series().to_list())
+                asset_dates[file.stem] = unique_dates
+                all_dates_union.update(unique_dates)
+            except Exception as e:
+                print(f"Error reading {file.stem}: {e}")
+        
+        # Group expected dates by year
+        expected_dates_by_year = defaultdict(set)
+        for date in all_dates_union:
+            if 2004 <= date.year <= 2008:
+                expected_dates_by_year[date.year].add(date)
+        
+        # Second pass: count missing dates per asset per year
+        missing_data_results = []
+        
+        for asset_name, dates in asset_dates.items():
+            row = {'asset_name': asset_name}
+            
+            for year in [2004, 2005, 2006, 2007, 2008]:
+                expected = expected_dates_by_year[year]
+                actual = {d for d in dates if d.year == year}
+                missing = expected - actual
+                row[str(year)] = len(missing)
+            
+            missing_data_results.append(row)
+        
+        # Create DataFrame
+        df_missing = pl.DataFrame(missing_data_results)
+        df_missing = df_missing.sort('asset_name')
+        
+        return df_missing
+    #===========================================================
     
     def process_all_assets(self):
         """
@@ -193,23 +267,23 @@ class DataPreprocessingPolars:
         Skips assets that already have cleaned files in output_path.
         Creates clean parquet files with naming: {ticker}_clean.parquet
         """
-        folder = Path(self.folder_path)
-        output_path = Path(self.output_path)
-        output_path.mkdir(parents=True, exist_ok=True)
         
-        parquet_files = list(folder.glob('*.parquet'))
+
+        self.output_path.mkdir(parents=True, exist_ok=True)
+        
+        parquet_files = list(self.folder_path.glob('*.parquet'))
         
         if not parquet_files:
             print(f"No parquet files found in '{self.folder_path}'")
             return
         
         # Check which files already exist
-        existing_cleaned = set(f.stem.replace('_clean', '') for f in output_path.glob('*_clean.parquet'))
+        existing_cleaned = set(f.stem.replace('_clean', '') for f in self.output_path.glob('*_clean.parquet'))
         files_to_process = [f for f in parquet_files if f.stem not in existing_cleaned]
         files_to_load = [f for f in parquet_files if f.stem in existing_cleaned]
         
         print(f"{'='*70}")
-        print(f"PROCESSING {len(parquet_files)} ASSETS WITH POLARS")
+        print(f"PROCESSING {len(parquet_files)} ASSETS")
         if self.start_date and self.end_date:
             print(f"Date filter: {self.start_date} to {self.end_date}")
         else:
@@ -223,11 +297,73 @@ class DataPreprocessingPolars:
         loaded_count = 0
         processed_count = 0
         
+        # Check timestamps for all raw data files
+        timestamp_csv_path = self.timestamp_path
+        if not timestamp_csv_path.exists():
+            print("Checking timestamps in raw data files...")
+            df_timestamps = self.check_timestamps(self.folder_path)
+            with pl.Config(tbl_rows=-1):
+                print(df_timestamps)
+            df_timestamps.write_csv(timestamp_csv_path)
+            print(f"\n{'='*70}\n")
+        else:
+            print("Timestamp file already exists, loading it...")
+            df_timestamps = pl.read_csv(timestamp_csv_path)
+            print(f"\n{'='*70}\n")
+        
+        # Identify assets to skip based on incomplete data coverage
+        # Expected full coverage: 2004-01-02 to 2008-12-31
+ 
+        expected_start = date(2004, 1, 2)
+        expected_end = date(2008, 12, 31)
+        
+        assets_to_skip = []
+        for row in df_timestamps.iter_rows(named=True):
+            asset = row['asset']
+            first_ts = row['first_timestamp']
+            last_ts = row['last_timestamp']
+            
+            # Convert to date
+            if isinstance(first_ts, str):
+                first_date = pl.Series([first_ts]).str.to_datetime().dt.date()[0]
+                last_date = pl.Series([last_ts]).str.to_datetime().dt.date()[0]
+            else:
+                first_date = first_ts.date() if hasattr(first_ts, 'date') else first_ts
+                last_date = last_ts.date() if hasattr(last_ts, 'date') else last_ts
+            
+            if first_date != expected_start or last_date != expected_end:
+                assets_to_skip.append(asset)
+        
+        self.assets_to_skip = assets_to_skip
+        print(f"Assets to skip due to incomplete data coverage: {len(assets_to_skip)}")
+        print(f"Assets: {assets_to_skip}")
+        print(f"\n{'='*70}\n")
+      
+        # Check missing data per asset per year
+        if not self.timestamp_path.exists():
+            print("Checking missing data per asset per year...")
+            df_missing = self.check_missing_data_per_asset(self.folder_path, self.assets_to_skip)
+            if df_missing is not None:
+                with pl.Config(tbl_rows=-1):
+                    print(df_missing)
+                df_missing.write_csv(self.timestamp_path)
+                print(f"Missing data report saved to {self.timestamp_path}")
+            print(f"\n{'='*70}\n")
+        else:
+            print("Missing data report already exists, skipping analysis...")
+            print(f"\n{'='*70}\n")
+       
+        
         for i, file in enumerate(parquet_files, 1):
+            # Skip assets with incomplete data
+            if file.stem in self.assets_to_skip:
+                print(f"[{i}/{len(parquet_files)}] Skipping {file.stem} (incomplete data coverage)\n")
+                continue
+            
             df_clean = None
             stats = None
             try:
-                output_file = output_path / f"{file.stem}_clean.parquet"
+                output_file = self.output_path / f"{file.stem}_clean.parquet"
                 
                 # Check if file exists
                 if output_file.exists():
@@ -249,7 +385,7 @@ class DataPreprocessingPolars:
                     
                     # Process the asset
                     df_clean, stats = self.process_single_asset(file)
-                    
+                  
                     # Save cleaned data
                     df_clean.write_parquet(output_file)
                     
@@ -274,7 +410,7 @@ class DataPreprocessingPolars:
                 # Try to save whatever data we have
                 if df_clean is not None:
                     try:
-                        output_file = output_path / f"{file.stem}_clean.parquet"
+                        output_file = self.output_path / f"{file.stem}_clean.parquet"
                         df_clean.write_parquet(output_file)
                         print(f"  Saved partial data to: {output_file.name}\n")
                         if stats:
@@ -291,65 +427,33 @@ class DataPreprocessingPolars:
         print(f"Total assets: {len(parquet_files)}")
         print(f"  - Loaded (already cleaned): {loaded_count}")
         print(f"  - Processed (newly cleaned): {processed_count}")
-        print(f"Output folder: {output_path}")
+        print(f"Output folder: {self.output_path}")
         
-        # Calculate totals only from processed files (loaded files don't have these stats)
         processed_results = [s for s in results_summary if s.get('original_rows') is not None]
         
         if processed_results:
-            total_rows = sum(s['final_rows'] for s in processed_results)
+
+            total_original = sum(s['original_rows'] for s in processed_results)
+            total_filtered = sum(s['filtered_rows'] for s in processed_results)
+            total_final = sum(s['final_rows'] for s in processed_results)
             total_duplicates = sum(s['duplicates_removed'] for s in processed_results)
             total_nan = sum(s['nan_removed'] for s in processed_results)
             total_zero = sum(s['zero_volume_removed'] for s in processed_results)
             
+            # Calculate average percentage removed
+            total_removed = total_original - total_final
+            avg_pct_removed = (total_removed / total_original) * 100 if total_original > 0 else 0
+            
             print(f"\nProcessed files statistics:")
-            print(f"Total cleaned rows: {total_rows:,}")
+            print(f"Total original rows: {total_original:,}")
+            print(f"Total after date filter: {total_filtered:,}")
+            print(f"Total cleaned rows: {total_final:,}")
+            print(f"Total rows removed: {total_removed:,} ({avg_pct_removed:.2f}%)")
             print(f"Total removed - Duplicates: {total_duplicates:,}, "
                   f"NaN: {total_nan:,}, "
                   f"Zero-volume: {total_zero:,}")
     
-    def load_cleaned_data(self):
-        """
-        Load all cleaned data from output_path
-        
-        Returns:
-            Dictionary with {ticker: Polars DataFrame}
-        """
-        output_path = Path(self.output_path)
-        
-        if not output_path.exists():
-            print(f"Error: Folder '{self.output_path}' does not exist!")
-            print("Run process_all_assets() first.")
-            return {}
-        
-        parquet_files = list(output_path.glob('*_clean.parquet'))
-        
-        if not parquet_files:
-            print(f"No cleaned files found in '{self.output_path}'")
-            return {}
-        
-        print(f"Loading {len(parquet_files)} cleaned assets with Polars...")
-        
-        data = {}
-        for i, file in enumerate(parquet_files, 1):
-            try:
-                # Extract ticker (remove '_clean' suffix)
-                ticker = file.stem.replace('_clean', '')
-                
-                # Load data with Polars
-                df = pl.read_parquet(file)
-                data[ticker] = df
-                
-                if (i % 10 == 0) or (i == len(parquet_files)):
-                    print(f"  Loaded {i}/{len(parquet_files)} assets...")
-                    
-            except Exception as e:
-                print(f"  Error loading {file.name}: {e}")
-        
-        print(f"\n✓ Successfully loaded {len(data)} assets")
-        
-        return data
-    
+
     def resample_with_vwap(self, df, interval='1min'):
         """
         Resample a DataFrame to a specified time interval using VWAP aggregation
@@ -413,7 +517,7 @@ class DataPreprocessingPolars:
         
         return df_resampled
     
-    def create_panel_data(self, industry_mapping_path='industry_mapping.csv', resample_interval=None):
+    def create_panel_data(self, resample_interval=None):
         """
         Concatenate all cleaned assets into a single panel DataFrame
         
@@ -421,47 +525,37 @@ class DataPreprocessingPolars:
         - timestamp: datetime
         - ticker: asset ticker (without .N suffix)
         - ask-price, ask-volume, bid-price, bid-volume, spread, mid-price, volume_imbalance
-        - industry: industry classification from CSV
         
         Args:
-            industry_mapping_path: Path to CSV with ticker-industry mapping            resample_interval: Optional time interval for VWAP resampling before concatenation.
+            resample_interval: Optional time interval for VWAP resampling before concatenation.
                              Options: '1min', '5min', '15min', '30min', '1h'
                              If None, no resampling is performed (uses original tick data)            
         Returns:
             Polars DataFrame in long format (timestamp x ticker)
         """
-        output_path = Path(self.output_path)
         
-        if not output_path.exists():
+        
+        if not self.output_path.exists():
             print(f"Error: Folder '{self.output_path}' does not exist!")
             print("Run process_all_assets() first.")
             return None
         
-        parquet_files = list(output_path.glob('*_clean.parquet'))
+        parquet_files = list(self.output_path.glob('*_clean.parquet'))
         
         if not parquet_files:
             print(f"No cleaned files found in '{self.output_path}'")
             return None
+        
+        # Filter out assets that should be skipped
+        if self.assets_to_skip:
+            parquet_files = [f for f in parquet_files if f.stem.replace('_clean', '') not in self.assets_to_skip]
+            print(f"Excluding {len(self.assets_to_skip)} assets from panel: {self.assets_to_skip}")
         
         print(f"{'='*70}")
         print(f"CREATING PANEL DATA FROM {len(parquet_files)} ASSETS")
         if resample_interval:
             print(f"With VWAP resampling to {resample_interval} intervals")
         print(f"{'='*70}\n")
-        
-        # Load industry mapping
-        print(f"Loading industry mapping from {industry_mapping_path}...")
-        industry_df = pl.read_csv(industry_mapping_path)
-        ticker_col = industry_df.columns[0]
-        industry_col = industry_df.columns[1]
-        
-        # Create mapping dictionary (ticker -> industry)
-        industry_map = dict(zip(
-            industry_df[ticker_col].to_list(),
-            industry_df[industry_col].to_list()
-        ))
-        
-        print(f"Loaded {len(industry_map)} industry mappings\n")
         
         # Load and concatenate all assets
         panel_frames = []
@@ -496,10 +590,6 @@ class DataPreprocessingPolars:
                 # Add ticker column
                 df = df.with_columns(pl.lit(ticker).alias('ticker'))
                 
-                # Add industry column
-                industry = industry_map.get(ticker, 'Unknown')
-                df = df.with_columns(pl.lit(industry).alias('industry'))
-                
                 panel_frames.append(df)
                 
                 if (i % 10 == 0) or (i == len(parquet_files)):
@@ -515,13 +605,12 @@ class DataPreprocessingPolars:
         # Sort by timestamp and ticker
         panel_df = panel_df.sort(['timestamp', 'ticker'])
         
-        # Reorder columns: timestamp, ticker, features, industry
+        # Reorder columns: timestamp, ticker, features
         column_order = [
             'timestamp', 'ticker',
             'ask-price', 'ask-volume', 
             'bid-price', 'bid-volume',
-            'spread', 'mid-price', 'volume_imbalance',
-            'industry'
+            'spread', 'mid-price', 'volume_imbalance'
         ]
         panel_df = panel_df.select(column_order)
         
@@ -531,194 +620,6 @@ class DataPreprocessingPolars:
         print(f"Shape: {panel_df.shape}")
         print(f"Date range: {panel_df.select(pl.col('timestamp').min()).item()} to {panel_df.select(pl.col('timestamp').max()).item()}")
         print(f"Number of assets: {panel_df.select(pl.col('ticker').n_unique()).item()}")
-        print(f"Number of industries: {panel_df.select(pl.col('industry').n_unique()).item()}")
-        print(f"\nIndustries:")
-        industry_counts = panel_df.group_by('industry').agg(
-            pl.col('ticker').n_unique().alias('n_assets')
-        ).sort('industry')
-        print(industry_counts)
         
         return panel_df
-    
-    def create_wide_panel_data(self, industry_mapping_path='industry_mapping.csv'):
-        """
-        Create wide-format panel data where each asset's features become separate columns
-        
-        Creates a wide DataFrame with:
-        - timestamp: datetime (index)
-        - For each asset: {ticker}_ask-price, {ticker}_ask-volume, {ticker}_bid-price, etc.
-        - {ticker}_industry for each asset
-        
-        Args:
-            industry_mapping_path: Path to CSV with ticker-industry mapping
-            
-        Returns:
-            Polars DataFrame in wide format (timestamp as rows, assets as column groups)
-        """
-        # First create long format
-        panel_long = self.create_panel_data(industry_mapping_path)
-        
-        if panel_long is None:
-            return None
-        
-        print(f"\n{'='*70}")
-        print("CONVERTING TO WIDE FORMAT")
-        print(f"{'='*70}\n")
-        
-        # Pivot to wide format for each feature
-        features = ['ask-price', 'ask-volume', 'bid-price', 'bid-volume', 
-                   'spread', 'mid-price', 'volume_imbalance']
-        
-        # Get unique timestamps
-        timestamps = panel_long.select('timestamp').unique().sort('timestamp')
-        wide_df = timestamps
-        
-        # For each feature, pivot and join
-        for feature in features:
-            print(f"Pivoting {feature}...")
-            pivot = panel_long.pivot(
-                values=feature,
-                index='timestamp',
-                columns='ticker'
-            )
-            
-            # Rename columns to {ticker}_{feature}
-            pivot = pivot.rename({
-                col: f"{col}_{feature}" if col != 'timestamp' else col
-                for col in pivot.columns
-            })
-            
-            # Join with main DataFrame
-            wide_df = wide_df.join(pivot, on='timestamp', how='left')
-        
-        # Add industry columns (one per ticker)
-        print("Adding industry columns...")
-        industry_df = panel_long.select(['ticker', 'industry']).unique()
-        
-        for row in industry_df.iter_rows(named=True):
-            ticker = row['ticker']
-            industry = row['industry']
-            wide_df = wide_df.with_columns(
-                pl.lit(industry).alias(f"{ticker}_industry")
-            )
-        
-        print(f"\n{'='*70}")
-        print("WIDE PANEL DATA CREATED")
-        print(f"{'='*70}")
-        print(f"Shape: {wide_df.shape}")
-        print(f"Date range: {wide_df.select(pl.col('timestamp').min()).item()} to {wide_df.select(pl.col('timestamp').max()).item()}")
-        
-        return wide_df
-    
-    def compare_resampling_intervals(self, industry_mapping_path='industry_mapping.csv',
-                                    intervals=['1min', '5min', '15min', '30min']):
-        """
-        Compare different resampling intervals to see which produces the least NaN values
-        
-        This function creates panel data with different time aggregations and reports:
-        - Total rows in the panel
-        - Number of NaN values per column
-        - Percentage of data retention
-        - Memory usage
-        
-        Args:
-            industry_mapping_path: Path to CSV with ticker-industry mapping
-            intervals: List of time intervals to test (e.g., ['1min', '5min', '15min', '30min'])
-            
-        Returns:
-            Dictionary with comparison statistics for each interval
-        """
-        print(f"{'='*70}")
-        print(f"COMPARING RESAMPLING INTERVALS: {', '.join(intervals)}")
-        print(f"{'='*70}\n")
-        
-        results = {}
-        
-        for interval in intervals:
-            print(f"\n{'='*70}")
-            print(f"Testing interval: {interval}")
-            print(f"{'='*70}")
-            
-            try:
-                # Create panel data with this interval
-                panel = self.create_panel_data(
-                    industry_mapping_path=industry_mapping_path,
-                    resample_interval=interval
-                )
-                
-                if panel is None:
-                    print(f"Failed to create panel for {interval}")
-                    continue
-                
-                # Calculate statistics
-                total_rows = panel.height
-                total_cells = total_rows * len(panel.columns)
-                
-                # Count nulls per column
-                null_counts = {}
-                for col in panel.columns:
-                    if col not in ['timestamp', 'ticker', 'industry']:
-                        n_nulls = panel[col].null_count()
-                        null_counts[col] = n_nulls
-                
-                total_nulls = sum(null_counts.values())
-                null_percentage = (total_nulls / total_cells) * 100
-                
-                # Get unique timestamps and tickers
-                n_timestamps = panel.select(pl.col('timestamp').n_unique()).item()
-                n_tickers = panel.select(pl.col('ticker').n_unique()).item()
-                
-                # Estimate memory (approximate)
-                memory_mb = panel.estimated_size('mb')
-                
-                # Store results
-                results[interval] = {
-                    'total_rows': total_rows,
-                    'n_timestamps': n_timestamps,
-                    'n_tickers': n_tickers,
-                    'total_cells': total_cells,
-                    'total_nulls': total_nulls,
-                    'null_percentage': null_percentage,
-                    'memory_mb': memory_mb,
-                    'null_counts_by_column': null_counts
-                }
-                
-                # Print summary
-                print(f"\nResults for {interval}:")
-                print(f"  Total rows: {total_rows:,}")
-                print(f"  Unique timestamps: {n_timestamps:,}")
-                print(f"  Unique tickers: {n_tickers:,}")
-                print(f"  Total NaN values: {total_nulls:,} ({null_percentage:.2f}%)")
-                print(f"  Memory usage: {memory_mb:.2f} MB")
-                print(f"\n  NaN counts by column:")
-                for col, count in sorted(null_counts.items(), key=lambda x: x[1], reverse=True):
-                    pct = (count / total_rows) * 100
-                    print(f"    {col}: {count:,} ({pct:.2f}%)")
-                
-                # Free memory
-                del panel
-                
-            except Exception as e:
-                print(f"\nError testing interval {interval}: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # Print comparison summary
-        print(f"\n\n{'='*70}")
-        print("COMPARISON SUMMARY")
-        print(f"{'='*70}")
-        print(f"\n{'Interval':<10} {'Rows':<15} {'Timestamps':<12} {'NaN %':<10} {'Memory (MB)':<12}")
-        print(f"{'-'*70}")
-        
-        for interval in intervals:
-            if interval in results:
-                r = results[interval]
-                print(f"{interval:<10} {r['total_rows']:<15,} {r['n_timestamps']:<12,} "
-                      f"{r['null_percentage']:<10.2f} {r['memory_mb']:<12.2f}")
-        
-        # Recommend best interval (least NaN percentage)
-        if results:
-            best_interval = min(results.items(), key=lambda x: x[1]['null_percentage'])
-            print(f"\nRecommendation: {best_interval[0]} has the lowest NaN percentage ({best_interval[1]['null_percentage']:.2f}%)")
-        
-        return results
+
