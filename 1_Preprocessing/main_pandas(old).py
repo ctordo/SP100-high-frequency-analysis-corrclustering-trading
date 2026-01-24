@@ -34,21 +34,3 @@ print(f"\nLoaded {len(data_dict)} cleaned assets")
 print(f"Example ticker: {list(data_dict.keys())[0]}")
 print(f"\nExample data:")
 print(data_dict[list(data_dict.keys())[0]].head())
-
-#==========================================================
-
-#==========================================================
-#---------Covariances : dimensionality reduction ----------
-input_path = './panel_data_1min.parquet'
-covariance_denoise = CovarianceDenoiser(input_path=input_path)
-run_covariance_denoise(input_path= input_path)
-
-#==========================================================
-
-
-
-#TODO : 
-# - Time aggregation : volatility ? Resample 1,5,10,30min --> optimal granularity : chosen when we have least NaNs 
-# - Epps effect 
-# - How to estimate correlation matrix --> dimensionality reduction ? factors ? 
-# - Investigate autocorrelation for intraday data
