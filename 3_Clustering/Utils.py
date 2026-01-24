@@ -79,14 +79,17 @@ def create_output_df(louvain_clusters,leiden_clusters,industry_clusters,tickers)
     return clustering_results_df
 
 
-def run_all_clustering_methods(returns_df):
+def run_all_clustering_methods(returns_df, correlation_matrix=None):
     """
-    Run all clustering methods (Leiden, Louvain, and Industry-based) on the returns data.
+    Run all clustering methods (Leiden, Louvain, Marsili-Giada, and Industry-based) on the returns data.
     
     Parameters:
     -----------
     returns_df : pd.DataFrame
         DataFrame containing stock returns with dates as index and ticker symbols as columns
+    correlation_matrix : pd.DataFrame or np.ndarray, optional
+        Pre-computed cleaned correlation matrix (e.g., after Marchenko-Pastur denoising).
+        If None, each method will compute its own correlation matrix from returns_df.
     
     Returns:
     --------
@@ -94,33 +97,39 @@ def run_all_clustering_methods(returns_df):
         DataFrame with clustering results containing columns:
         - 'Louvain_Cluster': cluster assignments from Louvain method
         - 'Leiden_Cluster': cluster assignments from Leiden method
+        - 'Marsili_Giada_Cluster': cluster assignments from Marsili-Giada method
         - 'Industry_Cluster': cluster assignments based on industry classification
     """
     from Leiden_clustering import LeidenCorrelationClustering
     from Louvain_clustering import LouvainCorrelationClustering
+    from Marsili_Giada_clustering import MarsiliGiadaCorrelationClustering
     
     # Get tickers
     tickers = returns_df.columns
     
     # Run Leiden clustering
-    leiden_df = LeidenCorrelationClustering(returns_df)
+    leiden_df = LeidenCorrelationClustering(returns_df, correlation_matrix=correlation_matrix)
     leiden_clusters = leiden_df['cluster'].values
     
     # Run Louvain clustering
-    louvain_df = LouvainCorrelationClustering(returns_df)
+    louvain_df = LouvainCorrelationClustering(returns_df, correlation_matrix=correlation_matrix)
     louvain_clusters = louvain_df.iloc[:, 0].values
+    
+    # Run Marsili-Giada clustering
+    marsili_df = MarsiliGiadaCorrelationClustering(returns_df, correlation_matrix=correlation_matrix)
+    marsili_clusters = marsili_df['cluster'].values
     
     # Run Industry-based clustering
     industry_clusters_series = cluster_industry(tickers)
     industry_clusters = industry_clusters_series.values
     
     # Create output DataFrame
-    clustering_results_df = create_output_df(
-        louvain_clusters, 
-        leiden_clusters, 
-        industry_clusters, 
-        tickers
-    )
+    clustering_results_df = pd.DataFrame({
+        'Louvain_Cluster': louvain_clusters,
+        'Leiden_Cluster': leiden_clusters,
+        'Marsili_Giada_Cluster': marsili_clusters,
+        'Industry_Cluster': industry_clusters
+    }, index=tickers)
     
     return clustering_results_df
 

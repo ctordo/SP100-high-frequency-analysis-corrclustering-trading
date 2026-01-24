@@ -84,23 +84,31 @@ def plot_industry_distribution_by_cluster(clustering_df, cluster_column='Leiden_
 
 def plot_all_clustering_methods(clustering_df):
     """
-    Creates three subplots showing industry distribution for Leiden, Louvain, and Industry clusters.
+    Creates subplots showing industry distribution for all clustering methods.
     
     Parameters:
     -----------
     clustering_df : pd.DataFrame
-        DataFrame containing clustering results with columns: 'Leiden_Cluster', 'Louvain_Cluster', 'Industry_Cluster'
+        DataFrame containing clustering results with columns for different clustering methods
     
     Returns:
     --------
     fig : matplotlib figure object
     """
-    fig = plt.figure(figsize=(18, 6))
+    # Determine which clustering methods are available
+    available_methods = []
+    possible_methods = ['Leiden_Cluster', 'Louvain_Cluster', 'Marsili_Giada_Cluster', 'Industry_Cluster']
+    for method in possible_methods:
+        if method in clustering_df.columns:
+            available_methods.append(method)
     
-    cluster_methods = ['Leiden_Cluster', 'Louvain_Cluster', 'Industry_Cluster']
+    n_methods = len(available_methods)
+    fig = plt.figure(figsize=(6 * n_methods, 6))
+    
+    cluster_methods = available_methods
     
     for idx, cluster_method in enumerate(cluster_methods, 1):
-        ax = fig.add_subplot(1, 3, idx)
+        ax = fig.add_subplot(1, n_methods, idx)
         
         # Map tickers to industries
         industries = clustering_df.index.map(lambda ticker: industry_mapping.get(ticker, 'Other'))
@@ -291,7 +299,7 @@ def plot_cluster_correlation_graph(returns_df, clustering_df, cluster_column='Lo
 
 def plot_all_cluster_correlation_graphs(returns_df, clustering_df):
     """
-    Creates correlation graphs for all three clustering methods.
+    Creates correlation graphs for all clustering methods.
     
     Parameters:
     -----------
@@ -304,12 +312,20 @@ def plot_all_cluster_correlation_graphs(returns_df, clustering_df):
     --------
     fig : matplotlib figure object
     """
-    fig = plt.figure(figsize=(18, 6))
+    # Determine which clustering methods are available
+    available_methods = []
+    possible_methods = ['Louvain_Cluster', 'Leiden_Cluster', 'Marsili_Giada_Cluster', 'Industry_Cluster']
+    for method in possible_methods:
+        if method in clustering_df.columns:
+            available_methods.append(method)
     
-    cluster_methods = ['Louvain_Cluster', 'Leiden_Cluster', 'Industry_Cluster']
+    n_methods = len(available_methods)
+    fig = plt.figure(figsize=(6 * n_methods, 6))
+    
+    cluster_methods = available_methods
     
     for idx, cluster_method in enumerate(cluster_methods, 1):
-        ax = fig.add_subplot(1, 3, idx)
+        ax = fig.add_subplot(1, n_methods, idx)
         
         # Get cluster assignments
         clusters = clustering_df[cluster_method].values
