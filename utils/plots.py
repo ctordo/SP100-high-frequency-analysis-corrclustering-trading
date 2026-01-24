@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import networkx as nx
-from Utils import industry_mapping
+from utils.Utils import industry_mapping
 
 
 def plot_industry_distribution_by_cluster(clustering_df, cluster_column='Leiden_Cluster'):

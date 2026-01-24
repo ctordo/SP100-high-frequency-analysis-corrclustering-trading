@@ -3,18 +3,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import importlib
-import trading_utils, trading_visuals
+import utils.trading_utils as trading_utils, utils.trading_visuals as trading_visuals
 importlib.reload(trading_utils)
 importlib.reload(trading_visuals)
-from trading_utils import generate_random_clusters, Pair, compute_strategy_pnl ###, construct_positions
-from trading_visuals import barplot_distrib_clusters, draw_positions_table, plot_cumulative_pnl
+from utils.trading_utils import generate_random_clusters, Pair, compute_strategy_pnl
+from utils.trading_visuals import barplot_distrib_clusters, draw_positions_table, plot_cumulative_pnl
 
-data_local = "../../FBD_local_data/"
-data_repo = "../Data/"
+from main_clustering import run_louvain
+
+data_local = "../FBD_local_data/"
 
 def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_emergency, patience_max,
            use_SUBDATA:bool = True,
            nb_pairs_cap:int=-1,
+           plot_pairs_lifetimes:bool = False,
            display_figures:bool = False):
 
     # Initial message
@@ -42,8 +44,9 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
     df_cum_returns = (1 + df_returns).cumprod() - 1
     
     # Tickers
-    TICKERS = list(df_prices.columns[1:])
+    TICKERS = list(df_prices.columns)
     tickers_index_map = {v: i for i, v in enumerate(TICKERS)}
+    print(tickers_index_map)
     
 
     # ============  BUILD MASTER "DATA" DICT ============ 
@@ -113,8 +116,9 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
         df_returns_clustering = DATA["RETURNS"].iloc[clustering_start:clustering_end]
         
         # Generate clusters based on clustering period data
-        # TODO: When actual clustering function is ready, it should use df_returns_clustering
-        df_clusters = generate_random_clusters(TICKERS, n_clusters=10, seed=42 + window_idx)
+        ### df_clusters = generate_random_clusters(TICKERS, n_clusters=10, seed=42 + window_idx)
+        df_clusters = run_louvain(df_returns_clustering)
+
         n_clusters = len(df_clusters["cluster"].unique())
         print(f"  Generated {n_clusters} clusters for this window")
         
@@ -156,7 +160,7 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
                                   np_positions)
         
         # Plot one random pair of each window
-        if(display_figures):
+        if(display_figures and plot_pairs_lifetimes):
             print("  Plotting one random pair of that window:")
             pair_to_plot = np.random.randint(0, nb_eval-1)
             pairs[pair_to_plot].plot_lifetime_last(df_returns = DATA["RETURNS"],

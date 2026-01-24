@@ -1,12 +1,11 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from Leiden_clustering import LeidenCorrelationClustering
-from Louvain_clustering import LouvainCorrelationClustering
-from Marsili_Giada_clustering import MarsiliGiadaCorrelationClustering
-from Utils import cluster_industry, industry_mapping
-from marchenko_pastur import apply_marchenko_pastur_denoising
-from plots import (
+from utils.Leiden_clustering import LeidenCorrelationClustering
+from utils.Louvain_clustering import LouvainCorrelationClustering
+from utils.Marsili_Giada_clustering import MarsiliGiadaCorrelationClustering
+from utils.Utils import cluster_industry, industry_mapping
+from utils.plots import (
     plot_all_clustering_methods,
     plot_all_cluster_correlation_graphs,
     plot_industry_distribution_by_cluster,
@@ -299,22 +298,22 @@ def run_louvain(returns_df):
         - 'Louvain_Cluster': Cluster assignments from Louvain method
     
     """
-    print('Starting Louvain clustering...')
+    print('  Starting Louvain clustering...')
     
     # Get tickers
     tickers = returns_df.columns
     
     # Run Louvain Clustering
     louvain_df = LouvainCorrelationClustering(returns_df)
-    louvain_clusters = louvain_df['cluster'].values
+    louvain_clusters = louvain_df[0].values
     
     # Create Output DataFrame
     results = pd.DataFrame({
-        'Louvain_Cluster': louvain_clusters
-    }, index=tickers)
+        'asset': tickers,
+        'cluster': louvain_clusters
+    })
     
-    print('Louvain clustering completed.')
-    
+    print('  Louvain clustering completed.')
     return results
 
 

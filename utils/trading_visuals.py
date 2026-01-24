@@ -22,7 +22,7 @@ def draw_positions_table(np_positions, TICKERS):
     # Mask zeros so they are transparent
     masked = np.ma.masked_equal(np_positions, 0)
 
-    vmin = max(masked.min(), -masked.max())
+    vmin = min(masked.min(), -masked.max())
     vmax = max(masked.max(), -masked.min())
     bounds = np.arange(vmin - 0.5, vmax + 1.5)
     cmap = plt.get_cmap("coolwarm", len(bounds) - 1)
