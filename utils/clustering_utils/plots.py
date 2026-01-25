@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import networkx as nx
-from utils.Utils import industry_mapping
+from utils.clustering_utils.Utils import industry_mapping
 
 
 def plot_industry_distribution_by_cluster(clustering_df, cluster_column='Leiden_Cluster'):
@@ -63,7 +63,7 @@ def plot_industry_distribution_by_cluster(clustering_df, cluster_column='Leiden_
     ax.set_title(f'Industry Distribution by {cluster_column.replace("_", " ")}', 
                  fontsize=16, fontweight='bold', pad=20)
     ax.set_xticks(x_positions)
-    ax.set_xticklabels([f'Cluster {i+1}' for i in industry_cluster_proportions.index], 
+    ax.set_xticklabels([f'C{i+1}' for i in industry_cluster_proportions.index], 
                        fontsize=12)
     ax.set_ylim(0, 100)
     ax.set_yticks([0, 25, 50, 75, 100])

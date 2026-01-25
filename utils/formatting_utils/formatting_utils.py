@@ -61,7 +61,7 @@ def plot_daily_nan_proportion_heatmap(df_wide, title, list_tickers, gradient_cou
     )
 
     # Plot heatmaps
-    fig, ax = plt.subplots(1, 2, figsize = (24, 16), sharey=True)
+    fig, ax = plt.subplots(1, 2, figsize = (24, 12), sharey=True)
     fig.suptitle(title)
 
     hm1 = sns.heatmap(

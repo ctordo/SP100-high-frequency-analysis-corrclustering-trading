@@ -12,8 +12,6 @@ def generate_random_clusters(TICKERS, n_clusters=3, seed=42):
 
 
 class Pair:
-    # CHANGE REQUEST 2: Added prices and spreads parameters
-    # OPTIMIZATION: Accept Series directly instead of DataFrames with column names
     def __init__(self, stock_A, stock_B, index_A, index_B, returns_A, returns_B, 
                  prices_A, prices_B, spreads_A, spreads_B):
         self.stock_A = stock_A 
@@ -22,7 +20,6 @@ class Pair:
         self.stock_B = stock_B
         self.index_B = index_B
         self.returns_B = returns_B
-        # CHANGE REQUEST 2: Store prices and spreads for spread-aware evaluation
         self.prices_A = prices_A
         self.prices_B = prices_B
         self.spreads_A = spreads_A

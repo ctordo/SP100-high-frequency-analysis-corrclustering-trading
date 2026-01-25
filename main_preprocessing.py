@@ -2,8 +2,10 @@
 Test script to run the Polars-based data preprocessing pipeline
 and compare performance with Pandas version
 """
-from preprocessing_utils import DataPreprocessingPolars
+from utils.preprocessing_utils.preprocessing_utils import DataPreprocessingPolars
 import time
+
+data_local = "../FBD_local_data/"
 
 def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min'):
     """
@@ -17,7 +19,11 @@ def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min
     Returns:
         panel: The final panel data DataFrame
     """
-    data_local = "../../FBD_local_data/"
+    
+    # Initial message
+    print("="*70)
+    print("ENTERING PHASE 1: PREPROCESSING")
+    print("="*70 + "\n")
 
     #Original raw parquet path 
     raw_parquet_path = data_local + "Data_parquet/"
@@ -57,12 +63,9 @@ def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min
     else:
         print("\nNo panel data created - check that data files exist in the specified folder")
     
+    # Final message
+    print("\n" + "="*70)
+    print("PHASE 1 CORRECTLY TERMINATED")
+    print("="*70 + "\n")
+
     return panel
-
-
-if __name__ == "__main__":
-    # Run with default parameters when executed as a script
-    panel = main_1()
-
-
-

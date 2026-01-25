@@ -1,22 +1,18 @@
 import pandas as pd
 
-import importlib
-import formatting_utils
-importlib.reload(formatting_utils)
-from formatting_utils import panel_to_table, plot_daily_nan_proportion_heatmap
+from utils.formatting_utils.formatting_utils import panel_to_table, plot_daily_nan_proportion_heatmap
 
-data_local = "../../FBD_local_data/"
-data_repo = "../Data/"
+data_local = "../FBD_local_data/"
 
 def main_2(display_figures:bool = False):
 
     # Initial message
     print("="*70)
     print("ENTERING PHASE 2: FORMATTING")
-    print("="*70 + "\n")
+    print("="*70)
 
     # ============ LOAD PHASE INPUTS ============ 
-    print("2.1 Loading phase inputs...")
+    print("="*50 + "\n2.1 Loading phase inputs")
     
     # Panel
     df_panel1min = pd.read_parquet(data_local + "panel_data_1min.parquet")
@@ -27,7 +23,7 @@ def main_2(display_figures:bool = False):
     
 
     # ============ FORMAT STOCK PRICES ============ 
-    print("2.2 Table restructuring")
+    print("="*50 + "\n2.2 Table restructuring")
     
     print("  Build DataFrame of stock prices (pivoting panel by ticker aggregation)...")
     df_prices = panel_to_table(df_panel1min, attribute="mid-price", aggfunc="last", disp=False)
@@ -43,7 +39,7 @@ def main_2(display_figures:bool = False):
     TICKERS = df_prices.columns.to_list()[1:]
 
     # ============ NAN EVALUATION ============ 
-    print("2.3 Missing values evaluation")
+    print("="*50 + "\n2.3 Missing values evaluation")
     if(display_figures):
         plot_daily_nan_proportion_heatmap(df_prices, "PRICE", TICKERS, gradient_count="Blues", gradient_prop="Greens")
         plot_daily_nan_proportion_heatmap(df_spreads, "PRICE", TICKERS, gradient_count="Reds", gradient_prop="Greens")
@@ -70,12 +66,12 @@ def main_2(display_figures:bool = False):
 
 
     # ============ COMPUTING RETURNS ============ 
-    print("  Build DataFrame of stock returns (pct changes of prices)...")
+    print("="*50 + "\n2.4 Build DataFrame of stock returns (pct changes of prices)")
     df_returns = df_prices.pct_change()
 
 
     # ============ FILES WRITING ============ 
-    print(f"\n2.4 Write .csv files at {data_local}...")
+    print("="*50 + f"\n2.5 Writing .csv files at [{data_local}]")
     count=0  
     df_prices.to_csv(data_local + "stock_prices.csv")
     count+=1

@@ -100,9 +100,9 @@ def run_all_clustering_methods(returns_df, correlation_matrix=None):
         - 'Marsili_Giada_Cluster': cluster assignments from Marsili-Giada method
         - 'Industry_Cluster': cluster assignments based on industry classification
     """
-    from Leiden_clustering import LeidenCorrelationClustering
-    from Louvain_clustering import LouvainCorrelationClustering
-    from Marsili_Giada_clustering import MarsiliGiadaCorrelationClustering
+    from utils.clustering_utils.Leiden_clustering import LeidenCorrelationClustering
+    from utils.clustering_utils.Louvain_clustering import LouvainCorrelationClustering
+    from utils.clustering_utils.Marsili_Giada_clustering import MarsiliGiadaCorrelationClustering
     
     # Get tickers
     tickers = returns_df.columns

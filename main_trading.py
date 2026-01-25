@@ -2,12 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-import importlib
-import utils.trading_utils as trading_utils, utils.trading_visuals as trading_visuals
-importlib.reload(trading_utils)
-importlib.reload(trading_visuals)
-from utils.trading_utils import generate_random_clusters, Pair, compute_strategy_pnl
-from utils.trading_visuals import barplot_distrib_clusters, draw_positions_table, plot_cumulative_pnl
+from utils.trading_utils.trading_utils import generate_random_clusters, Pair, compute_strategy_pnl
+from utils.trading_utils.trading_visuals import barplot_distrib_clusters, draw_positions_table, plot_cumulative_pnl
 
 from main_clustering import run_louvain
 
@@ -22,10 +18,10 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
     # Initial message
     print("="*70)
     print("ENTERING PHASE 4: TRADING STRATEGY IMPELMENTATION")
-    print("="*70 + "\n")
+    print("="*70)
 
     # ============ LOAD AND REFORMAT PHASE INPUTS ============ 
-    print("4.1 Loading phase inputs...")
+    print("="*50 + "\n4.1 Loading phase inputs...")
     
     # Stock prices
     print("  Loading + structuring 'stock_prices.csv'...")
@@ -46,11 +42,10 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
     # Tickers
     TICKERS = list(df_prices.columns)
     tickers_index_map = {v: i for i, v in enumerate(TICKERS)}
-    print(tickers_index_map)
     
 
     # ============  BUILD MASTER "DATA" DICT ============ 
-    print("4.2 Building DATA master dictionary...")
+    print("="*50 + "\n4.2 Building DATA master dictionary...")
         
     DATA = {}
     if(not use_SUBDATA):
@@ -76,20 +71,8 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
         
     print("  Succesfully built DATA dictionary.")
     
-    # SUBDATA Building - Sanity check 
-    if(display_figures):
-        print("  (Sanity check) Plotting cumulative returns of 5 random assets:")
-        fig, ax = plt.subplots(figsize = (22, 4))
-        ax.plot(DATA["CUMRETURNS"].sample(5, axis=1), label = DATA["CUMRETURNS"].sample(5, axis=1).columns)
-        ax.set_title("5 random samples of DATA[CUMRETURNS]")
-        ax.set_xticks([])
-        ax.legend()
-        ax.axhline(0, color='black')
-        ax.grid(axis = 'y', alpha =0.5)
-        plt.show()
-
     # ============ ROLLING CLUSTERS AND PAIRS CONSTRUCTION ============ 
-    print("4.3 Implementing rolling clustering approach...")
+    print("="*50 + "\n4.3 Implementing rolling clustering approach...")
     print(f"  Clustering will be recalculated every {window_clustering} timestamps")
 
     # Initialize positions array
@@ -100,6 +83,8 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
     total_timestamps = len(DATA["RETURNS"])
     num_windows = (total_timestamps - window_clustering) // window_clustering + 1
     print(f"  Total timestamps: {total_timestamps}, Number of rolling windows: {num_windows}")
+
+    list_nb_pairs = []
 
     # Iterate through rolling windows
     for window_idx in range(num_windows):
@@ -120,10 +105,7 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
         df_clusters = run_louvain(df_returns_clustering)
 
         n_clusters = len(df_clusters["cluster"].unique())
-        print(f"  Generated {n_clusters} clusters for this window")
-        
-        if(window_idx == 0 and display_figures):
-            barplot_distrib_clusters(df_clusters, n_clusters)
+        print(f"    Louvain clustering done. Generated {n_clusters} clusters for this window")
         
         # Construct intra-cluster pairs for this window
         pairs = []
@@ -141,6 +123,7 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
                                       spreads_B = DATA["SPREADS"][ticker2]))
         
         nb_pairs = len(pairs)
+        list_nb_pairs.append(nb_pairs)
         nb_eval = min(nb_pairs, nb_pairs_cap) if nb_pairs_cap > 0 else nb_pairs
         print(f"  Constructed {nb_pairs} pairs, evaluating {nb_eval} pairs")
         
@@ -148,7 +131,7 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
         count = 0
         for pair in pairs[:nb_eval]:
             count += 1
-            if count % 5 == 0 or count == nb_eval:
+            if count % 50 == 0 or count == nb_eval:
                 print(f"    Evaluating pair {count}/{nb_eval}: {pair.stock_A}-{pair.stock_B}")
             
             # Evaluate pair for each timestamp in trading period
@@ -174,7 +157,7 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
     # Do a column for sum of positions to check = 0
     np_positions[:, -1] = np_positions.sum(axis=1)
     
-    print(f"\n4.4 All rolling windows completed.")
+    print("="*50 + "\n4.4 All rolling windows completed.")
     print(f"  Final positions array shape: {np_positions.shape} (columns allocated for {len(TICKERS)} assets, +1 for row-wise sum).")
 
     if(display_figures):
@@ -185,8 +168,21 @@ def main_4(window_clustering, window_lookback, lambda_in, lambda_out, lambda_eme
                             columns=TICKERS,
                             index=DATA["RETURNS"].index)
     
+
     # ============ COMPUTE STRATEGY PNL ============ 
-    print("4.5 Computing PNL series...")
+    print("="*50 + "\n4.5 Strategy statistics")
+    print("  The strategy processed...")
+    print(f"  • {len(TICKERS)} assets")
+    print(f"  • over a total of {len(DATA["RETURNS"])} time ticks")
+    print(f"  • {num_windows} complete clustering/trading cycles")
+    np_nb_pairs = np.array(list_nb_pairs)
+    mean_nb_pairs = int(np.mean(np_nb_pairs))
+    print(f"  • an average of {mean_nb_pairs} pairs per window")
+    print(f"  • resulting in a total of {mean_nb_pairs * num_windows * window_clustering} pair-timestamp evaluations")
+   
+
+    # ============ COMPUTE STRATEGY PNL ============ 
+    print("="*50 + "\n4.6 Computing PNL series...")
     pnl_curve = compute_strategy_pnl(DATA["RETURNS"], df_positions, DATA["PRICES"], DATA["SPREADS"])
     if(display_figures):
         plot_cumulative_pnl(pnl_curve)

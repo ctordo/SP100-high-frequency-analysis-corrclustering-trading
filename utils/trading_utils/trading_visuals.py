@@ -22,9 +22,8 @@ def draw_positions_table(np_positions, TICKERS):
     # Mask zeros so they are transparent
     masked = np.ma.masked_equal(np_positions, 0)
 
-    vmin = min(masked.min(), -masked.max())
-    vmax = max(masked.max(), -masked.min())
-    bounds = np.arange(vmin - 0.5, vmax + 1.5)
+    vminmax = max(abs(masked.min()), abs(masked.max()))
+    bounds = np.arange(-vminmax - 0.5, vminmax + 1.5)
     cmap = plt.get_cmap("coolwarm", len(bounds) - 1)
     norm = BoundaryNorm(bounds, cmap.N)
 
@@ -44,7 +43,7 @@ def draw_positions_table(np_positions, TICKERS):
         orientation='horizontal',
         shrink=0.7,
         label="Value",
-        ticks=np.arange(vmin, vmax + 1),
+        ticks=np.arange(-int(vminmax/5)*5-5, int(vminmax/5)*5+5, 5),
         pad=0.1  # space between plot and colorbar
     )
 
@@ -63,12 +62,13 @@ def draw_positions_table(np_positions, TICKERS):
 def plot_cumulative_pnl(pnl_curve):
     # Plot PnL time series
 	plt.figure(figsize=(12, 6))
-	plt.plot(pnl_curve.index, pnl_curve.values, linewidth=2, color = 'red')
-	plt.axhline(y=0, color='black')
+	plt.plot(pnl_curve.index, pnl_curve.values, linewidth=2, color = 'blue')
+	plt.axhline(y=0, color='black', linestyle='--', alpha = 0.75)
 	plt.title('Cumulative PnL over time')
 	plt.xlabel('Time')
 	plt.xticks([])
 	plt.ylabel('Cumulative PnL')
+     
 	plt.grid(True, alpha=0.3)
 	plt.tight_layout()
 	plt.show()
