@@ -41,7 +41,7 @@ Execute the complete workflow by running:
 jupyter notebook master_notebook.ipynb
 ```
 
-This master notebook orchestrates the entire pipeline from raw data to trading signals.
+This master notebook illustrates the entire pipeline process ; from raw data to trading signals.
 
 ---
 
@@ -61,9 +61,9 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 - Create unified panel data (timestamp × ticker format)
 
 **Main Files**:
-- `datapreprocessing_polars.py` - Core preprocessing class
-- `main_polars.py` - Execution wrapper
-- `visualize_data.ipynb` - Comprehensive data analysis and visualization
+- `main_preprocessing.py` - Preprocessing execution script
+- `utils/preprocessing_utils/preprocessing_utils.py` - Core preprocessing functions
+
 
 **Output**: Clean panel data with 79 assets at 1-minute frequency
 
@@ -72,8 +72,8 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 **Purpose**: Prepare data structures for graph-based clustering algorithms.
 
 **Main Files**:
-- `formatting_utils.py` - Data transformation utilities
-- `cyp_nb.ipynb` - Formatting examples and tests
+- `main_formatting.py` - Formatting execution script
+- `utils/formatting_utils/formatting_utils.py` - Data transformation utilities
 
 ### 3. Clustering 
 
@@ -82,13 +82,15 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 **Methods**:
 - **Leiden Clustering** - High-quality community detection
 - **Louvain Clustering** - Fast modularity optimization
+- **Marsili-Giada Clustering** - Correlation-based filtering method
 
 **Main Files**:
-- `Leiden_clustering.py` - Leiden algorithm implementation
-- `Louvain_clustering.py` - Louvain algorithm implementation
-- `Utils.py` - Helper functions for graph construction
-- `plots.py` - Visualization utilities
-- `clustering_pipeline.ipynb` - End-to-end clustering workflow
+- `main_clustering.py` - Clustering execution script
+- `utils/clustering_utils/Leiden_clustering.py` - Leiden algorithm implementation
+- `utils/clustering_utils/Louvain_clustering.py` - Louvain algorithm implementation
+- `utils/clustering_utils/Marsili_Giada_clustering.py` - Marsili-Giada implementation
+- `utils/clustering_utils/Utils.py` - Helper functions for graph construction
+- `utils/clustering_utils/plots.py` - Visualization utilities
 
 **Output**: Asset pairs with high statistical co-movement
 
@@ -97,8 +99,9 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 **Purpose**: Implement statistical arbitrage strategies on identified pairs.
 
 **Main Files**:
-- `trading_utils.py` - Trading strategy logic
-- `visu.ipynb` - Performance visualization and backtesting
+- `main_trading.py` - Trading execution script
+- `utils/trading_utils/trading_utils.py` - Trading strategy logic
+- `utils/trading_utils/trading_visuals.py` - Performance visualization and analysis
 
 ---
 
