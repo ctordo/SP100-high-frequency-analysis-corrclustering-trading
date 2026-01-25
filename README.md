@@ -114,12 +114,12 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 ### Data Quality Checks
 - Timestamp coverage validation (2004-01-02 to 2008-12-31)
 - Missing data analysis per asset per year
-- Automatic exclusion of 6 assets with incomplete coverage (AA, MA, MS, NOV, PM, V)
+- Automatic exclusion of 7 assets with incomplete coverage (AA, MA, MS, NOV, PM, V, DVN)
 
 ### Key Features
 - Bid/ask prices and volumes
 - Spread (ask - bid)
-- Mid-price (VWAP weighted average)
+- Mid-price
 - Volume imbalance (bid-ask pressure)
 - High-frequency returns
 
@@ -137,22 +137,25 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 FBD2025/
 ├── README.md
 ├── master_notebook.ipynb          # Main pipeline execution
-├── 1_Preprocessing/
-│   ├── datapreprocessing_polars.py
-│   ├── main_polars.py
-│   └── visualize_data.ipynb
-├── 2_Formatting/
-│   ├── formatting_utils.py
-│   └── cyp_nb.ipynb
-├── 3_Clustering/
-│   ├── Leiden_clustering.py
-│   ├── Louvain_clustering.py
-│   ├── Utils.py
-│   ├── plots.py
-│   └── clustering_pipeline.ipynb
-└── 4_PairsTrading/
-    ├── trading_utils.py
-    └── visu.ipynb
+├── main_preprocessing.py          # Preprocessing entry point
+├── main_formatting.py             # Formatting entry point
+├── main_clustering.py             # Clustering entry point
+├── main_trading.py                # Trading strategy entry point
+└── utils/
+    ├── preprocessing_utils/
+    │   ├── preprocessing_utils.py
+    │   └── datapreprocessing_pandas.py
+    ├── formatting_utils/
+    │   └── formatting_utils.py
+    ├── clustering_utils/
+    │   ├── Leiden_clustering.py
+    │   ├── Louvain_clustering.py
+    │   ├── Marsili_Giada_clustering.py
+    │   ├── Utils.py
+    │   └── plots.py
+    └── trading_utils/
+        ├── trading_utils.py
+        └── trading_visuals.py
 ```
 
 ---
@@ -169,5 +172,8 @@ pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter
 ---
 
 ## Authors
+Tordo Cyprien,
+Dard Timothé, 
+Pécaut Marius. 
 
 EPFL - Financial Big Data Course, 2025
