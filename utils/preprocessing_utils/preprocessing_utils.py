@@ -10,255 +10,9 @@ class DataPreprocessingPolars:
         self.folder_path = Path(folder_path)  # Raw parquet data location
         self.output_path = Path(output_path)  # Clean output data location
         self.timestamp_path = Path(timestamp_path)
-        self.start_date = start_date  # Optional: filter start date
-        self.end_date = end_date  # Optional: filter end date
+        self.start_date = start_date  # Filter start date
+        self.end_date = end_date  # Filter end date
         self.assets_to_skip = None
-    
-    def process_single_asset(self, file_path):
-        """
-        Process a single asset through the cleaning pipeline using Polars
-        
-        Steps:
-        1. Load raw data
-        2. Convert datetime and set as index
-        3. Filter by date
-        4. Keep only relevant columns
-        5. Create mid-price (volume-weighted)
-        6. VWAP aggregation for duplicate timestamps
-        7. Calculate spread and volume imbalance
-        8. Drop NaN rows
-        9. Drop zero-volume rows
-        
-        Args:
-            file_path: Path to raw parquet file
-            
-        Returns:
-            Cleaned DataFrame and stats dictionary
-        """
-        ticker = file_path.stem
-        
-        #Load data with Polars
-        df = pl.read_parquet(file_path)
-        
-        #replace the column 'timestamp' by the same column timestamp in datetime format
-        df = df.with_columns(pl.col('timestamp').str.to_datetime(format='%Y-%m-%d %H:%M:%S%.f'))
-        
-        # Filter by Date: [start_date:end_date]
-        original_rows = df.height #df.shape[0] == vertical length
-        #Original_rows == How many rows we have at the beginning
-
-                    
-        #Condition if we did not specify any start and end_date : takes first of the column and add 3 months ~ 90 days
-        if self.start_date and self.end_date:
-            # Convert date strings to datetime
-            start = pl.lit(self.start_date).str.to_datetime(format='%Y-%m-%d')
-            end = pl.lit(self.end_date).str.to_datetime(format='%Y-%m-%d')
-            df = df.filter((pl.col('timestamp') >= start) & (pl.col('timestamp') <= end))
-        else:
-            first_date = df.select(pl.col('timestamp').min()).item()
-            end_date_auto = first_date + pl.duration(days=90)  # ~3 months
-            df = df.filter((pl.col('timestamp') >= first_date) & (pl.col('timestamp') <= end_date_auto))
-        #Filtered_rows == How many rows we have after selecting 3 months only 
-        filtered_rows = df.height
-        
-        # Keep only relevant columns
-        columns_to_keep = ['timestamp', 'bid-price', 'bid-volume', 'ask-price', 'ask-volume']
-        df = df.select(columns_to_keep)
-        
-        # Drop zero volume rows: avoids division by zero when averaging by volume
-        rows_before_zero = df.height
-        df = df.filter(
-            (pl.col('bid-volume') != 0) & 
-            (pl.col('ask-volume') != 0)
-        )
-        zero_volume_removed = rows_before_zero - df.height
-        
-        # Drop NaN rows
-        rows_before_nan = df.height
-        df = df.drop_nulls()
-        nan_removed_early = rows_before_nan - df.height
-        
-        # Create mid-price (volume-weighted average)
-        df = df.with_columns([
-            ((pl.col('bid-price') * pl.col('bid-volume') + 
-              pl.col('ask-price') * pl.col('ask-volume')) / 
-             (pl.col('bid-volume') + pl.col('ask-volume')))
-            .alias('mid-price (weighted-av)')
-        ])
-        
-        # VWAP aggregation for duplicate timestamps
-        duplicates = df.height - df.select(pl.col('timestamp')).unique().height
-        
-        if duplicates > 0:
-            try:
-                df = df.group_by('timestamp').agg([
-                    # Weighted averages for bid and ask prices
-                    (pl.col('bid-price') * pl.col('bid-volume')).sum() / pl.col('bid-volume').sum()
-                    .alias('bid-price'),
-                    
-                    (pl.col('ask-price') * pl.col('ask-volume')).sum() / pl.col('ask-volume').sum()
-                    .alias('ask-price'),
-                    
-                    # Sum volumes
-                    pl.col('bid-volume').sum().alias('bid-volume'),
-                    pl.col('ask-volume').sum().alias('ask-volume'),
-                ])
-                
-                # Recalculate mid-price (weighted-av) after aggregation
-                df = df.with_columns([
-                    ((pl.col('bid-price') * pl.col('bid-volume') + 
-                      pl.col('ask-price') * pl.col('ask-volume')) / 
-                     (pl.col('bid-volume') + pl.col('ask-volume')))
-                    .alias('mid-price (weighted-av)')
-                ])
-                
-            except Exception as e:
-                print(f"  Warning: VWAP aggregation failed ({e}), skipping...")
-        
-        # Calculate spread, mid-price, and volume imbalance
-        df = df.with_columns([
-            (pl.col('ask-price') - pl.col('bid-price')).alias('spread'),
-            ((pl.col('bid-price') + pl.col('ask-price')) / 2).alias('mid-price'),
-            ((pl.col('bid-volume') - pl.col('ask-volume')) / 
-             (pl.col('bid-volume') + pl.col('ask-volume'))).alias('volume_imbalance')
-        ])
-        
-        # Drop NaN (final cleanup)
-        rows_before_nan_final = df.height
-        df = df.drop_nulls()
-        nan_removed_final = rows_before_nan_final - df.height
-        
-        # Reorder columns (timestamp first, then others)
-        final_columns = ['timestamp', 'ask-price', 'ask-volume', 'bid-price', 'bid-volume',
-                        'spread', 'mid-price', 'volume_imbalance']
-        df = df.select(final_columns)
-        
-        # Sort by timestamp
-        df = df.sort('timestamp')
-        
-        return df, {
-            'ticker': ticker,
-            'original_rows': original_rows,
-            'filtered_rows': filtered_rows,
-            'duplicates_removed': duplicates,
-            'nan_removed': nan_removed_early + nan_removed_final,
-            'zero_volume_removed': zero_volume_removed,
-            'final_rows': df.height
-        }
-    #===================================================================
-    def check_timestamps(self, raw_data_path):
-        """
-        Check first and last timestamps for all parquet files in the raw data folder.
-        
-        Args:
-            raw_data_path: Path to folder containing raw parquet files
-            
-        Returns:
-            DataFrame with columns: asset, first_timestamp, last_timestamp
-        """
-        folder = Path(raw_data_path)
-        parquet_files = list(folder.glob('*.parquet'))
-        
-        timestamp_data = []
-        
-        for file in parquet_files:
-            try:
-                df = pl.read_parquet(file)
-                # Convert timestamp to datetime if it's a string
-                if df.schema['timestamp'] == pl.Utf8:
-                    df = df.with_columns(pl.col('timestamp').str.to_datetime(format='%Y-%m-%d %H:%M:%S%.f'))
-                
-                first_ts = df.select(pl.col('timestamp').min()).item()
-                last_ts = df.select(pl.col('timestamp').max()).item()
-                
-                timestamp_data.append({
-                    'asset': file.stem,
-                    'first_timestamp': first_ts,
-                    'last_timestamp': last_ts
-                })
-            except Exception as e:
-                print(f"Error reading {file.stem}: {e}")
-                timestamp_data.append({
-                    'asset': file.stem,
-                    'first_timestamp': None,
-                    'last_timestamp': None
-                })
-        
-        # Create DataFrame from collected data
-        df_timestamps = pl.DataFrame(timestamp_data)
-        return df_timestamps.sort('asset')
-    #===========================================================
-    
-    def check_missing_data_per_asset(self, raw_data_path, assets_to_skip):
-        """
-        Check for missing dates in each asset per year (2004-2008).
-        
-        For each asset, we identify the expected trading dates based on the union
-        of all dates present across all assets, then count how many dates are missing.
-        
-        Args:
-            raw_data_path: Path to folder containing raw parquet files
-            assets_to_skip: List of asset names to exclude from the check
-            
-        Returns:
-            DataFrame with columns: asset_name, 2004, 2005, 2006, 2007, 2008
-        """
-        folder = Path(raw_data_path)
-        parquet_files = [f for f in folder.glob('*.parquet') if f.stem not in assets_to_skip]
-        
-        if not parquet_files:
-            print("No valid parquet files found for missing data check")
-            return None
-        
-        print(f"Analyzing missing data across {len(parquet_files)} assets...")
-        
-        #First we collect all dates from all assets to determine "expected" trading dates
-        # By that we mean : If Asset A has January 2,3,5 and Asset B has January 1,2,3,4,5,6 
-        # then expected trading dates are 1,2,3,4,5,6 and we can determine that A has some missing values
-
-        all_dates_union = set()
-        asset_dates = {}
-        
-        for file in parquet_files:
-            try:
-                df = pl.read_parquet(file)
-                # Convert timestamp to datetime if needed
-                if df.schema['timestamp'] == pl.Utf8:
-                    df = df.with_columns(pl.col('timestamp').str.to_datetime(format='%Y-%m-%d %H:%M:%S%.f'))
-                
-                # Extract unique dates (date only, without time)
-                unique_dates = set(df.select(pl.col('timestamp').dt.date()).unique().to_series().to_list())
-                asset_dates[file.stem] = unique_dates
-                all_dates_union.update(unique_dates)
-            except Exception as e:
-                print(f"Error reading {file.stem}: {e}")
-        
-        # Group expected dates by year
-        expected_dates_by_year = defaultdict(set)
-        for date in all_dates_union:
-            if 2004 <= date.year <= 2008:
-                expected_dates_by_year[date.year].add(date)
-        
-        # Second pass: count missing dates per asset per year
-        missing_data_results = []
-        
-        for asset_name, dates in asset_dates.items():
-            row = {'asset_name': asset_name}
-            
-            for year in [2004, 2005, 2006, 2007, 2008]:
-                expected = expected_dates_by_year[year]
-                actual = {d for d in dates if d.year == year}
-                missing = expected - actual
-                row[str(year)] = len(missing)
-            
-            missing_data_results.append(row)
-        
-        # Create DataFrame
-        df_missing = pl.DataFrame(missing_data_results)
-        df_missing = df_missing.sort('asset_name')
-        
-        return df_missing
-    #===========================================================
     
     def process_all_assets(self):
         """
@@ -452,6 +206,253 @@ class DataPreprocessingPolars:
             print(f"Total removed - Duplicates: {total_duplicates:,}, "
                   f"NaN: {total_nan:,}, "
                   f"Zero-volume: {total_zero:,}")
+    
+    def process_single_asset(self, file_path):
+        """
+        Process a single asset through the cleaning pipeline using Polars
+        
+        Steps:
+        1. Load raw data
+        2. Convert datetime and set as index
+        3. Filter by date
+        4. Keep only relevant columns
+        5. VWAP aggregation for duplicate timestamps
+        6. Calculate spread and volume imbalance
+        7. Drop NaN rows
+        8. Drop zero-volume rows
+        
+        Args:
+            file_path: Path to raw parquet file
+            
+        Returns:
+            Cleaned DataFrame and stats dictionary
+        """
+        ticker = file_path.stem
+        
+        #Load data with Polars
+        df = pl.read_parquet(file_path)
+        
+        #replace the column 'timestamp' by the same column timestamp in datetime format
+        df = df.with_columns(pl.col('timestamp').str.to_datetime(format='%Y-%m-%d %H:%M:%S%.f'))
+        
+        # Filter by Date: [start_date:end_date]
+        original_rows = df.height #df.shape[0] == vertical length
+        #Original_rows == How many rows we have at the beginning
+
+                    
+        #Condition if we did not specify any start and end_date : takes first of the column and add 3 months ~ 90 days
+        if self.start_date and self.end_date:
+            # Convert date strings to datetime
+            start = pl.lit(self.start_date).str.to_datetime(format='%Y-%m-%d')
+            end = pl.lit(self.end_date).str.to_datetime(format='%Y-%m-%d')
+            df = df.filter((pl.col('timestamp') >= start) & (pl.col('timestamp') <= end))
+        else:
+            first_date = df.select(pl.col('timestamp').min()).item()
+            end_date_auto = first_date + pl.duration(days=90)  # ~3 months
+            df = df.filter((pl.col('timestamp') >= first_date) & (pl.col('timestamp') <= end_date_auto))
+        #Filtered_rows == How many rows we have after selecting 3 months only 
+        filtered_rows = df.height
+        
+        # Keep only relevant columns
+        columns_to_keep = ['timestamp', 'bid-price', 'bid-volume', 'ask-price', 'ask-volume']
+        df = df.select(columns_to_keep)
+        
+        # Drop zero volume rows: avoids division by zero when averaging by volume
+        rows_before_zero = df.height
+        df = df.filter(
+            (pl.col('bid-volume') != 0) & 
+            (pl.col('ask-volume') != 0)
+        )
+        zero_volume_removed = rows_before_zero - df.height
+        
+        # Drop NaN rows
+        rows_before_nan = df.height
+        df = df.drop_nulls()
+        nan_removed_early = rows_before_nan - df.height
+        
+        # Create mid-price (volume-weighted average)
+        df = df.with_columns([
+            ((pl.col('bid-price') * pl.col('bid-volume') + 
+              pl.col('ask-price') * pl.col('ask-volume')) / 
+             (pl.col('bid-volume') + pl.col('ask-volume')))
+            .alias('mid-price (weighted-av)')
+        ])
+        
+        # VWAP aggregation for duplicate timestamps
+        duplicates = df.height - df.select(pl.col('timestamp')).unique().height
+        
+        if duplicates > 0:
+            try:
+                df = df.group_by('timestamp').agg([
+                    # Weighted averages for bid and ask prices
+                    (pl.col('bid-price') * pl.col('bid-volume')).sum() / pl.col('bid-volume').sum()
+                    .alias('bid-price'),
+                    
+                    (pl.col('ask-price') * pl.col('ask-volume')).sum() / pl.col('ask-volume').sum()
+                    .alias('ask-price'),
+                    
+                    # Sum volumes
+                    pl.col('bid-volume').sum().alias('bid-volume'),
+                    pl.col('ask-volume').sum().alias('ask-volume'),
+                ])
+                
+                # Recalculate mid-price (weighted-av) after aggregation
+                df = df.with_columns([
+                    ((pl.col('bid-price') * pl.col('bid-volume') + 
+                      pl.col('ask-price') * pl.col('ask-volume')) / 
+                     (pl.col('bid-volume') + pl.col('ask-volume')))
+                    .alias('mid-price (weighted-av)')
+                ])
+                
+            except Exception as e:
+                print(f"  Warning: VWAP aggregation failed ({e}), skipping...")
+        
+        # Calculate spread, mid-price, and volume imbalance
+        df = df.with_columns([
+            (pl.col('ask-price') - pl.col('bid-price')).alias('spread'),
+            ((pl.col('bid-price') + pl.col('ask-price')) / 2).alias('mid-price'),
+            ((pl.col('bid-volume') - pl.col('ask-volume')) / 
+             (pl.col('bid-volume') + pl.col('ask-volume'))).alias('volume_imbalance')
+        ])
+        
+        # Drop NaN (final cleanup)
+        rows_before_nan_final = df.height
+        df = df.drop_nulls()
+        nan_removed_final = rows_before_nan_final - df.height
+        
+        # Reorder columns (timestamp first, then others)
+        final_columns = ['timestamp', 'ask-price', 'ask-volume', 'bid-price', 'bid-volume',
+                        'spread', 'mid-price', 'volume_imbalance']
+        df = df.select(final_columns)
+        
+        # Sort by timestamp
+        df = df.sort('timestamp')
+        
+        return df, {
+            'ticker': ticker,
+            'original_rows': original_rows,
+            'filtered_rows': filtered_rows,
+            'duplicates_removed': duplicates,
+            'nan_removed': nan_removed_early + nan_removed_final,
+            'zero_volume_removed': zero_volume_removed,
+            'final_rows': df.height
+        }
+    
+
+    def check_timestamps(self, raw_data_path):
+        """
+        Check first and last timestamps for all parquet files in the raw data folder.
+        Useful to detect whether some assets left or entered the SP100 during the period of interests
+        
+        Args:
+            raw_data_path: Path to folder containing raw parquet files
+            
+        Returns:
+            DataFrame with columns: asset, first_timestamp, last_timestamp
+        """
+        folder = Path(raw_data_path)
+        parquet_files = list(folder.glob('*.parquet'))
+        
+        timestamp_data = []
+        
+        for file in parquet_files:
+            try:
+                df = pl.read_parquet(file)
+                # Convert timestamp to datetime if it's a string
+                if df.schema['timestamp'] == pl.Utf8:
+                    df = df.with_columns(pl.col('timestamp').str.to_datetime(format='%Y-%m-%d %H:%M:%S%.f'))
+                
+                first_ts = df.select(pl.col('timestamp').min()).item()
+                last_ts = df.select(pl.col('timestamp').max()).item()
+                
+                timestamp_data.append({
+                    'asset': file.stem,
+                    'first_timestamp': first_ts,
+                    'last_timestamp': last_ts
+                })
+            except Exception as e:
+                print(f"Error reading {file.stem}: {e}")
+                timestamp_data.append({
+                    'asset': file.stem,
+                    'first_timestamp': None,
+                    'last_timestamp': None
+                })
+        
+        # Create DataFrame from collected data
+        df_timestamps = pl.DataFrame(timestamp_data)
+        return df_timestamps.sort('asset')
+
+    
+    def check_missing_data_per_asset(self, raw_data_path, assets_to_skip):
+        """
+        Check for missing dates in each asset per year (2004-2008).
+        
+        For each asset, we identify the expected trading dates based on the union
+        of all dates present across all assets, then count how many dates are missing.
+        
+        Args:
+            raw_data_path: Path to folder containing raw parquet files
+            assets_to_skip: List of asset names to exclude from the check
+            
+        Returns:
+            DataFrame with columns: asset_name, 2004, 2005, 2006, 2007, 2008
+        """
+        folder = Path(raw_data_path)
+        parquet_files = [f for f in folder.glob('*.parquet') if f.stem not in assets_to_skip]
+        
+        if not parquet_files:
+            print("No valid parquet files found for missing data check")
+            return None
+        
+        print(f"Analyzing missing data across {len(parquet_files)} assets...")
+        
+        #First we collect all dates from all assets to determine "expected" trading dates
+        # By that we mean : If Asset A has January 2,3,5 and Asset B has January 1,2,3,4,5,6 
+        # then expected trading dates are 1,2,3,4,5,6 and we can determine that A has some missing values
+
+        all_dates_union = set()
+        asset_dates = {}
+        
+        for file in parquet_files:
+            try:
+                df = pl.read_parquet(file)
+                # Convert timestamp to datetime if needed
+                if df.schema['timestamp'] == pl.Utf8:
+                    df = df.with_columns(pl.col('timestamp').str.to_datetime(format='%Y-%m-%d %H:%M:%S%.f'))
+                
+                # Extract unique dates (date only, without time)
+                unique_dates = set(df.select(pl.col('timestamp').dt.date()).unique().to_series().to_list())
+                asset_dates[file.stem] = unique_dates
+                all_dates_union.update(unique_dates)
+            except Exception as e:
+                print(f"Error reading {file.stem}: {e}")
+        
+        # Group expected dates by year
+        expected_dates_by_year = defaultdict(set)
+        for date in all_dates_union:
+            if 2004 <= date.year <= 2008:
+                expected_dates_by_year[date.year].add(date)
+        
+        # Second pass: count missing dates per asset per year
+        missing_data_results = []
+        
+        for asset_name, dates in asset_dates.items():
+            row = {'asset_name': asset_name}
+            
+            for year in [2004, 2005, 2006, 2007, 2008]:
+                expected = expected_dates_by_year[year]
+                actual = {d for d in dates if d.year == year}
+                missing = expected - actual
+                row[str(year)] = len(missing)
+            
+            missing_data_results.append(row)
+        
+        # Create DataFrame
+        df_missing = pl.DataFrame(missing_data_results)
+        df_missing = df_missing.sort('asset_name')
+        
+        return df_missing
+
     
 
     def resample_with_vwap(self, df, interval='1min'):

@@ -1,12 +1,5 @@
-"""
-Test script to run the Polars-based data preprocessing pipeline
-and compare performance with Pandas version
-"""
 from utils.preprocessing_utils.preprocessing_utils import DataPreprocessingPolars
 import time
-
-data_local = "../FBD_local_data/"
-
 def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min'):
     """
     Main function to run the complete preprocessing pipeline.
@@ -19,11 +12,8 @@ def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min
     Returns:
         panel: The final panel data DataFrame
     """
-    
-    # Initial message
-    print("="*70)
-    print("ENTERING PHASE 1: PREPROCESSING")
-    print("="*70 + "\n")
+    #Location of the raw parquet files
+    data_local = "../../FBD_local_data/"
 
     #Original raw parquet path 
     raw_parquet_path = data_local + "Data_parquet/"
@@ -43,8 +33,7 @@ def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min
             start_date=start_date,
             end_date=end_date)
 
-    # Process all assets
-    #Step 1: Process all assets (if not already done)
+    #Step 1: Process all assets
     print("\nStep 1: Processing/Loading cleaned assets...")
     preprocessing.process_all_assets()
 
@@ -53,8 +42,7 @@ def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min
     panel = preprocessing.create_panel_data(
             resample_interval=chosen_interval)
 
-    #Save the panel data
-    #Save in local_data + "panel_data/" + "panel_data_{chosen_interval}.parquet"
+    #Save the panel data in : local_data + "panel_data/" + "panel_data_{chosen_interval}.parquet"
     if panel is not None:
         output_file = data_local +  f"panel_data_{chosen_interval}.parquet"
         print(f"\nSaving panel data to {output_file}...")
@@ -63,9 +51,12 @@ def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min
     else:
         print("\nNo panel data created - check that data files exist in the specified folder")
     
-    # Final message
-    print("\n" + "="*70)
-    print("PHASE 1 CORRECTLY TERMINATED")
-    print("="*70 + "\n")
-
     return panel
+
+
+if __name__ == "__main__":
+    # Run with default parameters when executed as a script
+    panel = main_1()
+
+
+
