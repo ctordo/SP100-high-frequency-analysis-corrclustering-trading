@@ -20,21 +20,40 @@ This project implements a complete pipeline for analyzing high-frequency BBO (Be
 
 ### 1. Data Setup
 
-Download the required data from Google Drive:
+To ensure the correct execution of our code, please closely follow the below guidelines:
+
+- Download our code folder `FBD2025`. Place it in some high root (possibly the Desktop).
+
+- Download the required intial data from Google Drive: https://drive.google.com/drive/folders/1xProHPN1YtKKkLh8917-R50KtgXmy_rO. This should download a folder named `Data_parquet`, containing 85 parquet files (1 per asset).
+- Create a folder named `FBD_local_data` and place it in the same root as the `FBD2025` (again, possibly the Desktop). `FBD2025`and `FBD_local_data` must be at the same hierarchy level.
+- Place the downloaded `Data_parquet` folder inside `FBD_local_data`.
+- You are ready to go! Additional outputs will be generated in `FBD_local_data` during execution.
+
+To summarize, here is what your set-up should look like:
 ```
-https://drive.google.com/drive/folders/1xProHPN1YtKKkLh8917-R50KtgXmy_rO
+Desktop/                    # (or any high root)
+├── FBD2025/                # Folder with code files
+│   ├── main.py
+│   ├── utils.py              
+│   └── ...                 
+│
+└── FBD_local_data/         # Folder with initial parquet data 
+    └── Data_parquet/
+        ├── AA.N.parquet
+        ├── ...
+        └── XRX.N.parquet
 ```
 
-**Important**: Place the downloaded `FBD_local_data/` folder in your computer's root directory:
-```
-/Users/<your-username>/FBD_local_data/
+### 2. Requirements
+
+Install dependencies:
+```bash
+conda create -n finbigdata python=3.14
+conda activate finbigdata
+pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter scikit-network community
 ```
 
-The data folder should contain:
-- `Data_parquet/` - Raw BBO data for S&P 100 assets
-- Additional outputs will be generated here during processing
-
-### 2. Run the Pipeline
+### 3. Run the Pipeline
 
 Execute the complete workflow by running:
 ```bash
@@ -71,18 +90,6 @@ FBD2025/
         ├── trading_utils.py
         └── trading_visuals.py
 ```
-
----
-
-## Requirements
-
-Install dependencies:
-```bash
-conda create -n finbigdata python=3.14
-conda activate finbigdata
-pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter 
-```
-
 ---
 
 ## Pipeline Components
