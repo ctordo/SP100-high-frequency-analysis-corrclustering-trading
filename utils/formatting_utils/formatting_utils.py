@@ -6,6 +6,23 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def panel_to_table(df_panel1min, attribute:str, aggfunc:str, disp:bool=False):
+    """
+    Convert a panel-style DataFrame into a time X asset table.
+
+    Parameters
+    ----------
+    df_panel1min : pandas.DataFrame
+    attribute : str
+        Name of the column to populate the table values.
+    aggfunc : str
+    disp : bool, optional
+    
+    Returns
+    -------
+    pandas.DataFrame
+        Wide-format DataFrame indexed by timestamps with tickers as columns.
+        The index is converted to ``datetime``.
+    """
     df_pivot = (
         df_panel1min
         .pivot_table(

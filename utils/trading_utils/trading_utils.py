@@ -10,7 +10,6 @@ def generate_random_clusters(TICKERS, n_clusters=3, seed=42):
     df_clusters["cluster"] = np.random.randint(1, n_clusters+1, size=len(TICKERS))
     return df_clusters
 
-
 class Pair:
     def __init__(self, stock_A, stock_B, index_A, index_B, returns_A, returns_B, 
                  prices_A, prices_B, spreads_A, spreads_B):
@@ -176,16 +175,12 @@ def compute_strategy_pnl(returns_df, positions_df, prices_df, spreads_df):
 	position_changes = positions_df.diff().fillna(positions_df.iloc[0])
 	
 	# Transaction cost per trade = (spread / 2) / price
-	# This represents the cost of crossing the spread once (one-way)
 	transaction_cost_pct = (spreads_df / (2 * prices_df))
 	
-	# Total transaction costs: sum across all assets of |position_change| * spread_cost
 	transaction_costs_per_tick = (position_changes.abs() * transaction_cost_pct).sum(axis=1)
 	
-	# Net PnL per tick
 	net_pnl_per_tick = trading_pnl - transaction_costs_per_tick
 	
-	# Return cumulative PnL curve
 	cumulative_pnl = net_pnl_per_tick.cumsum()
 	        
 	return cumulative_pnl
