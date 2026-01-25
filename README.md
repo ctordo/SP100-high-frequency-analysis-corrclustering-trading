@@ -47,7 +47,7 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 
 ## Pipeline Components
 
-### 1. Preprocessing (`1_Preprocessing/`)
+### 1. Preprocessing 
 
 **Purpose**: Transform raw high-frequency data into clean, analysis-ready format.
 
@@ -67,7 +67,7 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 
 **Output**: Clean panel data with 79 assets at 1-minute frequency
 
-### 2. Formatting (`2_Formatting/`)
+### 2. Formatting
 
 **Purpose**: Prepare data structures for graph-based clustering algorithms.
 
@@ -75,7 +75,7 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 - `formatting_utils.py` - Data transformation utilities
 - `cyp_nb.ipynb` - Formatting examples and tests
 
-### 3. Clustering (`3_Clustering/`)
+### 3. Clustering 
 
 **Purpose**: Identify pairs of co-moving stocks using community detection on correlation graphs.
 
@@ -92,7 +92,7 @@ This master notebook orchestrates the entire pipeline from raw data to trading s
 
 **Output**: Asset pairs with high statistical co-movement
 
-### 4. Pairs Trading (`4_PairsTrading/`)
+### 4. Pairs Trading
 
 **Purpose**: Implement statistical arbitrage strategies on identified pairs.
 
