@@ -128,8 +128,9 @@ pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter
 - `utils/clustering_utils/Leiden_clustering.py` - Leiden algorithm implementation
 - `utils/clustering_utils/Louvain_clustering.py` - Louvain algorithm implementation
 - `utils/clustering_utils/Marsili_Giada_clustering.py` - Marsili-Giada implementation
-- `utils/clustering_utils/Utils.py` - Helper functions for graph construction
+- `utils/clustering_utils/Utils.py` - Helper functions 
 - `utils/clustering_utils/plots.py` - Visualization utilities
+- `utils/clustering_utils/clustering_analysis_report.ipynb` - Clustering analysis notebook
 
 **Output**: Asset pairs with high statistical co-movement
 
