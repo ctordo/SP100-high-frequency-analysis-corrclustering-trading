@@ -13,7 +13,7 @@ def main_1(start_date='2008-09-01', end_date='2008-12-31', chosen_interval='1min
         panel: The final panel data DataFrame
     """
     #Location of the raw parquet files
-    data_local = "../../FBD_local_data/"
+    data_local = "../FBD_local_data/"
 
     #Original raw parquet path 
     raw_parquet_path = data_local + "Data_parquet/"
