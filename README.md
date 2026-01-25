@@ -44,6 +44,45 @@ jupyter notebook master_notebook.ipynb
 This master notebook illustrates the entire pipeline process ; from raw data to trading signals.
 
 ---
+## Repository Structure
+
+```
+FBD2025/
+├── README.md
+├── master_notebook.ipynb          # Main pipeline execution
+├── main_preprocessing.py          # Preprocessing entry point
+├── main_formatting.py             # Formatting entry point
+├── main_clustering.py             # Clustering entry point
+├── main_trading.py                # Trading strategy entry point
+└── utils/
+    ├── preprocessing_utils/
+    │   ├── preprocessing_utils.py
+    │   └── datapreprocessing_pandas.py
+    ├── formatting_utils/
+    │   └── formatting_utils.py
+    ├── clustering_utils/
+    │   ├── Leiden_clustering.py
+    │   ├── Louvain_clustering.py
+    │   ├── Marsili_Giada_clustering.py
+    │   ├── Utils.py
+    │   └── plots.py
+    └── trading_utils/
+        ├── trading_utils.py
+        └── trading_visuals.py
+```
+
+---
+
+## Requirements
+
+Install dependencies:
+```bash
+conda create -n finbigdata python=3.14
+conda activate finbigdata
+pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter
+```
+
+---
 
 ## Pipeline Components
 
@@ -131,46 +170,6 @@ This master notebook illustrates the entire pipeline process ; from raw data to 
 - **Clustering**: NetworkX, python-igraph
 - **Visualization**: Matplotlib, Seaborn
 - **Environment**: Python 3.14, Jupyter notebooks
-
----
-
-## Repository Structure
-
-```
-FBD2025/
-├── README.md
-├── master_notebook.ipynb          # Main pipeline execution
-├── main_preprocessing.py          # Preprocessing entry point
-├── main_formatting.py             # Formatting entry point
-├── main_clustering.py             # Clustering entry point
-├── main_trading.py                # Trading strategy entry point
-└── utils/
-    ├── preprocessing_utils/
-    │   ├── preprocessing_utils.py
-    │   └── datapreprocessing_pandas.py
-    ├── formatting_utils/
-    │   └── formatting_utils.py
-    ├── clustering_utils/
-    │   ├── Leiden_clustering.py
-    │   ├── Louvain_clustering.py
-    │   ├── Marsili_Giada_clustering.py
-    │   ├── Utils.py
-    │   └── plots.py
-    └── trading_utils/
-        ├── trading_utils.py
-        └── trading_visuals.py
-```
-
----
-
-## Requirements
-
-Install dependencies:
-```bash
-conda create -n finbigdata python=3.14
-conda activate finbigdata
-pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter
-```
 
 ---
 
