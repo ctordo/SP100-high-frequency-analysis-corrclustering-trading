@@ -80,7 +80,7 @@ Install dependencies:
 ```bash
 conda create -n finbigdata python=3.14
 conda activate finbigdata
-pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter
+pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter scikit-network community
 ```
 
 ---
