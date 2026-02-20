@@ -1,108 +1,23 @@
-# Financial Big Data 2025
-**EPFL - Financial Big Data Course Project**
+# High-frequency S&P100 Analysis
 
-High-frequency trading data analysis pipeline and implementation of a pairs trading strategy for S&P 100 stocks (2004-2008).
+## Overview
 
----
+This project was conducted as part of our participiation in the EPFL course Financial Big Data (FIN-252), under the supervision of Prof. Damien Challet. It aims to demonstrate the application of big data techniques to high-frequency financial markets by implementing a complete pipeline from raw limit order book data to an executable pairs trading strategy. We process roughly **40 GB of nanosecond-level S&P100 data** and transform it into minute-frequency panels (addressing computational efficiency, missing values, and estimation noise). We then perform and compare **various time-series correlation clustering techniques** (Leiden, Louvain...). We finally use our findings to build a functionnal **pairs trading strategy**, carefully avoiding any look-ahead bias or data leakage.
 
-## Project Overview
-
-This project implements a complete pipeline for analyzing high-frequency BBO (Best Bid and Offer) data and developing pairs trading strategies through graph-based clustering. The pipeline consists of four main components:
-
-1. **Data Preprocessing** - Clean and aggregate raw tick data using Polars
-2. **Data Formatting** - Prepare data structures for clustering algorithms  
-3. **Clustering** - Identify trading pairs using Leiden/Louvain community detection
-4. **Pairs Trading** - Implement and backtest statistical arbitrage strategies
-
----
-
-## Quick Start
-
-### 1. Data Setup
-
-To ensure the correct execution of our code, please closely follow the below guidelines:
-
-- Download our code folder `FBD2025`. Place it in some high root (possibly the Desktop).
-
-- Download the required intial data from Google Drive: https://drive.google.com/drive/folders/1xProHPN1YtKKkLh8917-R50KtgXmy_rO. This should download a folder named `Data_parquet`, containing 85 parquet files (1 per asset).
-- Create a folder named `FBD_local_data` and place it in the same root as the `FBD2025` (again, possibly the Desktop). `FBD2025`and `FBD_local_data` must be at the same hierarchy level.
-- Place the downloaded `Data_parquet` folder inside `FBD_local_data`.
-- You are ready to go! Additional outputs will be generated in `FBD_local_data` during execution.
-
-To summarize, here is what your set-up should look like:
-```
-Desktop/                    # (or any high root)
-├── FBD2025/                # Folder with code files
-│   ├── main.py
-│   ├── utils.py              
-│   └── ...                 
-│
-└── FBD_local_data/         # Folder with initial parquet data 
-    └── Data_parquet/
-        ├── AA.N.parquet
-        ├── ...
-        └── XRX.N.parquet
-```
-
-### 2. Requirements
-
-Install dependencies:
-```bash
-conda create -n finbigdata python=3.14
-conda activate finbigdata
-pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter scikit-network community
-```
-
-### 3. Run the Pipeline
-
-Execute the complete workflow by running:
-```bash
-jupyter notebook master_notebook.ipynb
-```
-
-This master notebook illustrates the entire pipeline process ; from raw data to trading signals.
-
----
-## Repository Structure
-
-```
-FBD2025/
-├── README.md
-├── master_notebook.ipynb          # Main pipeline execution
-├── main_preprocessing.py          # Preprocessing entry point
-├── main_formatting.py             # Formatting entry point
-├── main_clustering.py             # Clustering entry point
-├── main_trading.py                # Trading strategy entry point
-└── utils/
-    ├── preprocessing_utils/
-    │   ├── preprocessing_utils.py
-    │   └── datapreprocessing_pandas.py
-    ├── formatting_utils/
-    │   └── formatting_utils.py
-    ├── clustering_utils/
-    │   ├── Leiden_clustering.py
-    │   ├── Louvain_clustering.py
-    │   ├── Marsili_Giada_clustering.py
-    │   ├── Utils.py
-    │   └── plots.py
-    |   └── clustering_analysis_report.ipynb
-    └── trading_utils/
-        ├── trading_utils.py
-        └── trading_visuals.py
-```
----
+We have meticulously documented our entire analysis and results, along with interpretations and improvement suggestions, in the report `FBD2025_report.pdf`. Guidelines to replicate our results are stated at the end of this ReadMe file.
 
 ## Pipeline Components
 
-### 1. Preprocessing 
+Our work flow comprises four phases:
+
+### 1. Data Preprocessing 
 
 **Purpose**: Transform raw high-frequency data into clean, analysis-ready format.
 
 **Key Steps**:
-- Load raw parquet files (23.4 GB of tick data)
+- Load raw parquet files (~40 GB of tick data)
 - Filter by date range (default: Sep-Dec 2008)
 - Remove duplicates via VWAP aggregation
-- Filter invalid observations (NaN, zero volume)
 - Identify and exclude assets with incomplete coverage
 - Resample to 1-minute intervals using VWAP
 - Create unified panel data (timestamp × ticker format)
@@ -111,12 +26,16 @@ FBD2025/
 - `main_preprocessing.py` - Preprocessing execution script
 - `utils/preprocessing_utils/preprocessing_utils.py` - Core preprocessing functions
 
-
 **Output**: Clean panel data with 79 assets at 1-minute frequency
 
 ### 2. Formatting
 
-**Purpose**: Prepare data structures for graph-based clustering algorithms.
+**Purpose**: Handle missing values and prepare data structures for graph-based clustering algorithms.
+
+**Key Steps**:
+- Format stock prices
+- Missing value treatment and NaN proportion visualizations
+- Compute stock returns as percentage changes
 
 **Main Files**:
 - `main_formatting.py` - Formatting execution script
@@ -144,22 +63,92 @@ FBD2025/
 
 ### 4. Pairs Trading
 
-**Purpose**: Implement statistical arbitrage strategies on identified pairs.
+**Purpose**: Implement statistical arbitrage strategies on periodically identified pairs and evaluate financial performance.
 
 **Main Files**:
 - `main_trading.py` - Trading execution script
 - `utils/trading_utils/trading_utils.py` - Trading strategy logic
 - `utils/trading_utils/trading_visuals.py` - Performance visualization and analysis
 
----
+
+## Replication
+
+To reproduce our entire analysis and results, please closely follow the below guidelines.
+
+#### Data Setup
+
+- Download our code folder `FBD2025`. Place it in some high root (possibly the Desktop).
+- Download the required intial data from Google Drive: https://drive.google.com/drive/folders/1xProHPN1YtKKkLh8917-R50KtgXmy_rO. This should download a folder named `Data_parquet`, containing 85 parquet files (1 per asset).
+- Create a folder named `FBD_local_data` and place it in the same root as the `FBD2025` (again, possibly the Desktop). `FBD2025`and `FBD_local_data` must be at the same hierarchy level.
+- Place the downloaded `Data_parquet` folder inside `FBD_local_data`.
+- You are ready to go! Additional outputs will be generated in `FBD_local_data` during execution.
+
+To summarize, here is what your set-up should look like:
+```
+Desktop/                    # (or any high root)
+├── FBD2025/                # Folder with code files
+│   ├── main.py
+│   ├── utils.py              
+│   └── ...                 
+│
+└── FBD_local_data/         # Folder with initial parquet data 
+    └── Data_parquet/
+        ├── AA.N.parquet
+        ├── ...
+        └── XRX.N.parquet
+```
+
+#### Requirements
+```bash
+conda create -n finbigdata python=3.14
+conda activate finbigdata
+pip install polars numpy pandas matplotlib seaborn scipy networkx jupyter scikit-network community
+```
+
+#### Execute the complete analysis 
+
+```bash
+jupyter notebook master_notebook.ipynb
+```
+
+## Repository Structure
+
+```
+FBD2025/
+├── README.md
+├── master_notebook.ipynb          # Main pipeline execution
+├── main_preprocessing.py          # Preprocessing entry point
+├── main_formatting.py             # Formatting entry point
+├── main_clustering.py             # Clustering entry point
+├── main_trading.py                # Trading strategy entry point
+└── utils/
+    ├── preprocessing_utils/
+    │   ├── preprocessing_utils.py
+    │   └── datapreprocessing_pandas.py
+    ├── formatting_utils/
+    │   └── formatting_utils.py
+    ├── clustering_utils/
+    │   ├── Leiden_clustering.py
+    │   ├── Louvain_clustering.py
+    │   ├── Marsili_Giada_clustering.py
+    │   ├── Utils.py
+    │   ├── plots.py
+    |   └── clustering_analysis_report.ipynb
+    └── trading_utils/
+        ├── trading_utils.py
+        └── trading_visuals.py
+```
+
+
+
 
 ## Technical Details
 
 ### Data Characteristics
-- **Assets**: S&P 100 constituents
+- **Assets**: S&P100 constituents
 - **Period**: January 2004 - December 2008 (full coverage for 79 assets)
 - **Frequency**: Original tick data (~microsecond) → Resampled to 1-minute
-- **Size**: ~23.4 GB raw data
+- **Size**: ~41.48 GB raw data
 - **Format**: Parquet files (one per asset)
 
 ### Data Quality Checks
@@ -183,8 +172,9 @@ FBD2025/
 ---
 
 ## Authors
-Tordo Cyprien,
+
 Dard Timothé, 
-Pécaut Marius. 
+Pécaut Marius,
+Tordo Cyprien.
 
 EPFL - Financial Big Data Course, 2025
